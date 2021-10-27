@@ -261,7 +261,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			if parsedArgs.dont_print_matches and\
 			   not parsedArgs.count and\
 			   not parsedArgs.total_count and\
-			   not any([_FML, _DML, _TML, _DFL, _TFL]):
+			   not _FML and not _DML and not _TML:
 				break
 
 			# Handle --sub
