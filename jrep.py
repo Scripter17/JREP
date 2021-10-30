@@ -138,8 +138,6 @@ def findAllSubs(pattern, replace, string):
 		subbed=re.sub(pattern, replace, string, count=index+1)
 		loffs=offs
 		offs+=len(subbed)-len(last)
-		# Remove the list casing if you're using this for your own projects
-		# It's just here to trick the rest of my code into working with it
 		yield JSObj({
 			"span": lambda:(loffs+match.span()[0],offs+match.span()[1]),
 			0     :  subbed[loffs+match.span()[0]:offs+match.span()[1]]

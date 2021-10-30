@@ -8,12 +8,23 @@ Basically I got annoyed at the lack of GREP for Windows and decided to do it mys
 The current --help message:
 
 ```
-usage: jrep.py [-h] [--string] [--no-duplicates] [--files FILES [FILES ...]] [--globs GLOBS [GLOBS ...]] [--stdin-files | --stdin-globs] [--name-regex NAME_REGEX]
-               [--full-name-regex FULL_NAME_REGEX] [--name-anti-regex NAME_ANTI_REGEX] [--full-name-anti-regex FULL_NAME_ANTI_REGEX] [--sort SORT] [--no-headers]
-               [--print-directories] [--print-file-names] [--print-full-paths] [--print-posix-paths] [--dont-print-matches] [--print-match-offset]
-               [--print-match-range] [--count] [--total-count] [--replace REPLACE] [--sub SUB [SUB ...]] [--file-match-limit FILE_MATCH_LIMIT]
-               [--dir-match-limit DIR_MATCH_LIMIT] [--total-match-limit TOTAL_MATCH_LIMIT] [--dir-file-limit DIR_FILE_LIMIT] [--total-file-limit TOTAL_FILE_LIMIT]
-               [--verbose]
+usage: jrep.py [-h] [--string] [--no-duplicates]
+               [--anti-regex ANTI_REGEX [ANTI_REGEX ...]]
+               [--files FILES [FILES ...]] [--globs GLOBS [GLOBS ...]]
+               [--stdin-files | --stdin-globs] [--name-regex NAME_REGEX]
+               [--full-name-regex FULL_NAME_REGEX]
+               [--name-anti-regex NAME_ANTI_REGEX]
+               [--full-name-anti-regex FULL_NAME_ANTI_REGEX] [--sort SORT]
+               [--no-headers] [--print-directories] [--print-file-names]
+               [--print-full-paths] [--print-posix-paths]
+               [--dont-print-matches] [--print-match-offset]
+               [--print-match-range] [--count] [--total-count]
+               [--replace REPLACE] [--sub SUB [SUB ...]] [--escape]
+               [--file-match-limit FILE_MATCH_LIMIT]
+               [--dir-match-limit DIR_MATCH_LIMIT]
+               [--total-match-limit TOTAL_MATCH_LIMIT]
+               [--dir-file-limit DIR_FILE_LIMIT]
+               [--total-file-limit TOTAL_FILE_LIMIT] [--verbose]
                [regex]
 
 positional arguments:
@@ -23,6 +34,8 @@ options:
   -h, --help            show this help message and exit
   --string, -s          Test for strings instead of regex
   --no-duplicates, -D   Don't print duplicate matches
+  --anti-regex ANTI_REGEX [ANTI_REGEX ...]
+                        Regexes for files to not match
   --files FILES [FILES ...], -f FILES [FILES ...]
                         The file(s) to check
   --globs GLOBS [GLOBS ...], -g GLOBS [GLOBS ...]
@@ -36,8 +49,10 @@ options:
   --name-anti-regex NAME_ANTI_REGEX
                         Like --name-regex but excludes file names that match
   --full-name-anti-regex FULL_NAME_ANTI_REGEX
-                        Like --full-name-regex but excludes file names that match
-  --sort SORT, -S SORT  Sort files by ctime, mtime, atime, name, or size. Prefix key with "r" to reverse
+                        Like --full-name-regex but excludes file names that
+                        match
+  --sort SORT, -S SORT  Sort files by ctime, mtime, atime, name, or size.
+                        Prefix key with "r" to reverse
   --no-headers, -H      Don't print match: or file: before lines
   --print-directories, -d
                         Print names of explored directories
@@ -59,6 +74,8 @@ options:
                         Regex replacement
   --sub SUB [SUB ...], -R SUB [SUB ...]
                         re.sub argument pairs after -r
+  --escape, -e          Replace \, carriage returns, and newlines with \\, \r,
+                        and \n
   --file-match-limit FILE_MATCH_LIMIT, --fml FILE_MATCH_LIMIT
                         Max matches per file
   --dir-match-limit DIR_MATCH_LIMIT, --dml DIR_MATCH_LIMIT
@@ -70,7 +87,6 @@ options:
   --total-file-limit TOTAL_FILE_LIMIT, --tfl TOTAL_FILE_LIMIT
                         Max files overall
   --verbose, -v         Verbose info
-
 ```
 
 Some example snippits:
