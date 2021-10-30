@@ -160,24 +160,28 @@ def getFiles():
 		for pattern in parsedArgs.globs:
 			yield from glob.iglob(pattern, recursive=True)
 
+	def _processDir(dname):
+		"""
+			Print directory names if --print-directories is specified
+		"""
+		if os.path.isfile(dname):
+			dname=os.path.dirname(dname)
+		dname=dname or "."
+		if parsedArgs.print_full_paths:  dname=os.path.realpath(dname)
+		if parsedArgs.print_posix_paths: dname=dname.replace("\\", "/")
+		if parsedArgs.print_directories and dname not in exploredDirs:
+			print(ofmt["dname"].format(dname=dname))
+			exploredDirs.append(dname)
+
 	# Add stdin as a file
 	if not os.isatty(sys.stdin.fileno()) and not parsedArgs.stdin_files and not parsedArgs.stdin_globs:
 		yield {"name":"-", "data":sys.stdin.read().encode(errors="ignore")}
 
 	exploredDirs=[]
 	for file in _getFiles():
+		_processDir(file) # Handle --print-directories
+		
 		if os.path.isfile(file):
-			if parsedArgs.print_directories and os.path.dirname(file) not in exploredDirs:
-				# --print-directores
-				# Dirname formatting
-				dname=os.path.dirname(file) or "."
-				if parsedArgs.print_full_paths:  dname=os.path.realpath(dname)
-				if parsedArgs.print_posix_paths: dname=dname.replace("\\", "/")
-
-				print(ofmt["dname"].format(dname=dname))
-
-				# Don't print the dirname twice
-				exploredDirs.append(os.path.dirname(file))
 			try:
 				with open(file) as f:
 					# Stream data from file instead of loading a 2.6GB file into RAM
@@ -188,14 +192,6 @@ def getFiles():
 					yield {"name": file, "data":mmapFile}
 			except Exception as AAAAA:
 				print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\"", file=sys.stderr)
-		elif parsedArgs.print_directories and os.path.isdir(file) and file not in exploredDirs:
-			# --print-directores
-			# Yes I know repeating code is bad; I'll have to clean this eventually
-			dname=os.path.dirname(file) or "."
-			if parsedArgs.print_full_paths:  dname=os.path.realpath(dname)
-			if parsedArgs.print_posix_paths: dname=dname.replace("\\", "/")
-			print(ofmt["dname"].format(dname=dname))
-			exploredDirs.append(file)
 
 # Abbreviations to make my editor not show a horizontal scrollbar (my version of PEP8)
 _FML=parsedArgs.file_match_limit
