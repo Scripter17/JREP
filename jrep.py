@@ -24,6 +24,7 @@ parser=argparse.ArgumentParser(formatter_class=CustomHelpFormatter)
 parser.add_argument("regex"                 ,       nargs="?", default="", help="Regex to test file contents for. omit to always match")
 parser.add_argument("--string"              , "-s", action="store_true"  , help="Test for strings instead of regex")
 parser.add_argument("--no-duplicates"       , "-D", action="store_true"  , help="Don't print duplicate matches")
+parser.add_argument("--anti-regex"          ,       nargs="+", default=[], help="Regexes for files to not match")
 
 parser.add_argument("--files"               , "-f", nargs="+", default=[], help="The file(s) to check")
 parser.add_argument("--globs"               , "-g", nargs="+", default=[], help="The glob(s) to check")
@@ -248,6 +249,14 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			matches=findAllSubs(regex, parsedArgs.replace.encode(errors="ignore"), file["data"])
 		else:
 			matches=re.finditer(regex, file["data"])
+
+		antiRegexMatch=False
+		for antiRegex in parsedArgs.anti_regex:
+			if re.search(antiRegex.encode(errors="ignore"), file["data"]):
+				antiRegexMatch=True
+				break
+		if antiRegexMatch:
+			continue
 
 		# Print file name
 		if matches and parsedArgs.print_file_names:
