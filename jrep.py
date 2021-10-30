@@ -179,6 +179,9 @@ def getFiles():
 
 	exploredDirs=[]
 	for file in _getFiles():
+		if parsedArgs.verbose:
+			print(f"Verbose: Processing file \"{file}\"")
+		
 		_processDir(file) # Handle --print-directories
 		
 		if os.path.isfile(file):
@@ -206,9 +209,14 @@ dirData={} # --file-limit and --dir-match-limit
 totalMatches=0
 
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
+	if parsedArgs.verbose:
+		print(f"Verbose: Processing {file}")
+
 	# For both --file-limit and --dir-match-limit
 	fileDir=os.path.dirname(file["name"])
 	if fileDir not in dirData:
+		if parsedArgs.verbose:
+			print(f"Verbose: Adding {fileDir} to dirData")
 		dirData[fileDir]={"files":0, "matches":0}
 
 	# Handle --file-limit
@@ -224,6 +232,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	   not  re.search(parsedArgs.full_name_anti_regex, os.path.realpath(file["name"]))):
 		# Not sure if this should be an `and` or an `or`
 		# Maybe I'll do a CLI flag like --name-regex-...function?
+		if parsedArgs.verbose:
+			print(f"Verbose: File name \"{file}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
 		continue
 	try:
 		# Get matches
