@@ -93,9 +93,9 @@ def sortFiles(files, key=None):
 		return files
 
 	sorts={
-		"ctime": lambda x:float("inf") if type(x["data"])==bytes else os.stat(x["name"]).st_ctime,
-		"mtime": lambda x:float("inf") if type(x["data"])==bytes else os.stat(x["name"]).st_mtime,
-		"atime": lambda x:float("inf") if type(x["data"])==bytes else os.stat(x["name"]).st_atime,
+		"ctime": lambda x:float("inf") if x["name"]=="-" else os.stat(x["name"]).st_ctime,
+		"mtime": lambda x:float("inf") if x["name"]=="-" else os.stat(x["name"]).st_mtime,
+		"atime": lambda x:float("inf") if x["name"]=="-" else os.stat(x["name"]).st_atime,
 		"name" : lambda x:x["name"],
 		"size" : lambda x:len(x["data"])
 	}
