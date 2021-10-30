@@ -52,6 +52,7 @@ parser.add_argument("--total-count"         , "-C", action="store_true"  , help=
 
 parser.add_argument("--replace"             , "-r",                        help="Regex replacement")
 parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after -r")
+parser.add_argument("--escape"              , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
 parser.add_argument("--file-match-limit"    , "--fml",  type=int, default=0  , help="Max matches per file")
 parser.add_argument("--dir-match-limit"     , "--dml",  type=int, default=0  , help="Max matches per directory")
@@ -65,6 +66,10 @@ parsedArgs=parser.parse_args()
 if parsedArgs.verbose:
 	print("JREP preview version")
 	print(parsedArgs)
+
+# Simple implementation of --escape
+if parsedArgs.escape:
+	parsedArgs.sub.extend(["\\", "\\\\", "\r", "\\r", "\n", "\\n"])
 
 # Dumb output fstring generation stuff
 _header=not parsedArgs.no_headers
