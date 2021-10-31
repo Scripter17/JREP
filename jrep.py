@@ -33,10 +33,10 @@ _stdin=parser.add_mutually_exclusive_group()
 _stdin.add_argument("--stdin-files"         , "-F", action="store_true"  , help="Treat STDIN as a list of files")
 _stdin.add_argument("--stdin-globs"         , "-G", action="store_true"  , help="Treat STDIN as a list of globs")
 
-parser.add_argument("--name-regex"          , "-t", default=r""          , help="Regex to test against relative file name")
-parser.add_argument("--full-name-regex"     , "-T", default=r""          , help="Regex to test against absolute file name")
-parser.add_argument("--name-anti-regex"     ,       default=r"$.^"       , help="Like --name-regex      but excludes file names that match")
-parser.add_argument("--full-name-anti-regex",       default=r"$.^"       , help="Like --full-name-regex but excludes file names that match")
+parser.add_argument("--name-regex"          , "-t", nargs="+", default=[], help="Regex to test against relative file name")
+parser.add_argument("--full-name-regex"     , "-T", nargs="+", default=[], help="Regex to test against absolute file name")
+parser.add_argument("--name-anti-regex"     ,       nargs="+", default=[], help="Like --name-regex      but excludes file names that match")
+parser.add_argument("--full-name-anti-regex",       nargs="+", default=[], help="Like --full-name-regex but excludes file names that match")
 
 parser.add_argument("--sort"                , "-S",                        help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse")
 parser.add_argument("--no-headers"          , "-H", action="store_true"  , help="Don't print match: or file: before lines")
@@ -229,15 +229,14 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		continue
 	dirData[fileDir]["files"]+=1
 
-	# Handle --name-regex and --full-name-regex
-	if not (re.search(parsedArgs.name_regex,           file["name"]) and\
-	        re.search(parsedArgs.full_name_regex,      os.path.realpath(file["name"])) and\
-	   not  re.search(parsedArgs.name_anti_regex,      file["name"]) and\
-	   not  re.search(parsedArgs.full_name_anti_regex, os.path.realpath(file["name"]))):
-		# Not sure if this should be an `and` or an `or`
-		# Maybe I'll do a CLI flag like --name-regex-...function?
+	# Handle --name-regex, --full-name-regex, --name-anti-regex, and--full-name-anti-regex
+	if not (all([re.search(x, file["name"]                  ) for x in parsedArgs.name_regex]          ) and\
+	        all([re.search(x, os.path.realpath(file["name"])) for x in parsedArgs.full_name_regex]     ) and\
+	   not  any([re.search(x, file["name"]                  ) for x in parsedArgs.name_anti_regex]     ) and\
+	   not  any([re.search(x, os.path.realpath(file["name"])) for x in parsedArgs.full_name_anti_regex])):
+		# Really should make how this works configurable
 		if parsedArgs.verbose:
-			print(f"Verbose: File name \"{file}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
+			print(f"Verbose: File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
 		continue
 	try:
 		# Get matches
