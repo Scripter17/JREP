@@ -45,11 +45,11 @@ parser.add_argument("--replace"             , "-r",                        help=
 parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after -r")
 parser.add_argument("--escape"              , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
-parser.add_argument("--file-match-limit"    , "--fml",  type=int, default=0  , help="Max matches per file")
-parser.add_argument("--dir-match-limit"     , "--dml",  type=int, default=0  , help="Max matches per directory")
-parser.add_argument("--total-match-limit"   , "--tml",  type=int, default=0  , help="Max matches overall")
-parser.add_argument("--dir-file-limit"      , "--dfl",  type=int, default=0  , help="Max files per directory")
-parser.add_argument("--total-file-limit"    , "--tfl",  type=int, default=0  , help="Max files overall")
+parser.add_argument("--file-match-limit"    , "--fml", type=int, default=0, help="Max matches per file")
+parser.add_argument("--dir-match-limit"     , "--dml", type=int, default=0, help="Max matches per directory")
+parser.add_argument("--total-match-limit"   , "--tml", type=int, default=0, help="Max matches overall")
+parser.add_argument("--dir-file-limit"      , "--dfl", type=int, default=0, help="Max files per directory")
+parser.add_argument("--total-file-limit"    , "--tfl", type=int, default=0, help="Max files overall")
 
 parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
 parsedArgs=parser.parse_args()
