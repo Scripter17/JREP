@@ -21,10 +21,10 @@ class CustomHelpFormatter(argparse.HelpFormatter):
 
 parser=argparse.ArgumentParser(formatter_class=CustomHelpFormatter)
 
-parser.add_argument("regex"                 ,       nargs="?", default="", help="Regex to test file contents for. omit to always match")
-parser.add_argument("--string"              , "-s", action="store_true"  , help="Test for strings instead of regex")
-parser.add_argument("--no-duplicates"       , "-D", action="store_true"  , help="Don't print duplicate matches")
-parser.add_argument("--anti-regex"          ,       nargs="+", default=[], help="Regexes for files to not match")
+parser.add_argument("regex"                 ,       nargs="+", default=[""], help="Regex to test file contents for. omit to always match")
+parser.add_argument("--string"              , "-s", action="store_true"    , help="Test for strings instead of regex")
+parser.add_argument("--no-duplicates"       , "-D", action="store_true"    , help="Don't print duplicate matches")
+parser.add_argument("--anti-regex"          ,       nargs="+", default=[]  , help="Regexes for files to not match")
 
 parser.add_argument("--files"               , "-f", nargs="+", default=[], help="The file(s) to check")
 parser.add_argument("--globs"               , "-g", nargs="+", default=[], help="The glob(s) to check")
@@ -239,77 +239,78 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			print(f"Verbose: File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
 		continue
 	try:
-		# Get matches
-		regex=parsedArgs.regex.encode(errors="ignore")
-
-		# Probably a bad idea
-		if parsedArgs.string:
-			regex=re.escape(regex)
-
-		# Arguably should be an elif but this is easier to mentally process
-		if parsedArgs.replace!=None:
-			matches=findAllSubs(regex, parsedArgs.replace.encode(errors="ignore"), file["data"])
-		else:
-			matches=re.finditer(regex, file["data"])
-
-		antiRegexMatch=False
-		for antiRegex in parsedArgs.anti_regex:
-			if re.search(antiRegex.encode(errors="ignore"), file["data"]):
-				antiRegexMatch=True
-				break
-		if antiRegexMatch:
-			continue
-
-		# Process matches
-		matchIndex=0
 		printedName=False
-		for matchIndex, match in enumerate(matches, start=1):
-			# Print file name
-			if parsedArgs.print_file_names and not printedName:
-				#print(fHeader+(os.path.realpath(file["name"]) if parsedArgs.print_full_paths else file["name"]))
-				fname=file["name"]
-				if parsedArgs.print_full_paths:  fname=os.path.realpath(fname)
-				if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
-				print(ofmt["fname"].format(fname=fname))
-				printedName=True
+		for regex in parsedArgs.regex:
+			# Turn regex into bytes
+			regex=regex.encode(errors="ignore")
 
-			totalMatches+=1
-			dirData[fileDir]["matches"]+=1
+			# Probably a bad idea
+			if parsedArgs.string:
+				regex=re.escape(regex)
 
-			# Quick optimization for when someone just wants filenames that have a match
-			if parsedArgs.dont_print_matches and\
-			   not parsedArgs.count and\
-			   not parsedArgs.total_count and\
-			   not _FML and not _DML and not _TML:
-				break
+			# Arguably should be an elif but this is easier to mentally process
+			if parsedArgs.replace!=None:
+				matches=findAllSubs(regex, parsedArgs.replace.encode(errors="ignore"), file["data"])
+			else:
+				matches=re.finditer(regex, file["data"])
 
-			# Handle --sub
-			# TYSM mCoding for explaining how zip works
-			# (zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
-			for pair in zip(parsedArgs.sub[0::2], parsedArgs.sub[1::2]):
-				match=JSObj({
-					0     : re.sub(pair[0].encode(), pair[1].encode(), match[0]),
-					"span": match.span
-				})
+			antiRegexMatch=False
+			for antiRegex in parsedArgs.anti_regex:
+				if re.search(antiRegex.encode(errors="ignore"), file["data"]):
+					antiRegexMatch=True
+					break
+			if antiRegexMatch:
+				continue
 
-			# Print matches
-			if not parsedArgs.dont_print_matches and match[0].decode() not in matchedStrings:
-				#print(mHeader+match[0].decode())
-				print(ofmt["match"].format(range=match.span(), match=match[0].decode()))
+			# Process matches
+			matchIndex=0
+			for matchIndex, match in enumerate(matches, start=1):
+				# Print file name
+				if parsedArgs.print_file_names and not printedName:
+					#print(fHeader+(os.path.realpath(file["name"]) if parsedArgs.print_full_paths else file["name"]))
+					fname=file["name"]
+					if parsedArgs.print_full_paths:  fname=os.path.realpath(fname)
+					if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
+					print(ofmt["fname"].format(fname=fname))
+					printedName=True
 
-			# Handle duplicate matches
-			if parsedArgs.no_duplicates:
-				matchedStrings.append(match[0].decode())
+				totalMatches+=1
+				dirData[fileDir]["matches"]+=1
 
-			# Handle --match-limit, --dir-match-limit, and --total-match-limit
-			if (_FML!=0 and matchIndex>=_FML) or\
-			   (_DML!=0 and dirData[fileDir]["matches"]>=_DML) or\
-			   (_TML!=0 and totalMatches>=_TML):
-				break
+				# Quick optimization for when someone just wants filenames that have a match
+				if parsedArgs.dont_print_matches and\
+				   not parsedArgs.count and\
+				   not parsedArgs.total_count and\
+				   not _FML and not _DML and not _TML:
+					break
 
-		# Print match count (--count)
-		if parsedArgs.count and matchIndex:
-			print(ofmt["count"].format(count=matchIndex))
+				# Handle --sub
+				# TYSM mCoding for explaining how zip works
+				# (zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
+				for pair in zip(parsedArgs.sub[0::2], parsedArgs.sub[1::2]):
+					match=JSObj({
+						0     : re.sub(pair[0].encode(), pair[1].encode(), match[0]),
+						"span": match.span
+					})
+
+				# Print matches
+				if not parsedArgs.dont_print_matches and match[0].decode() not in matchedStrings:
+					#print(mHeader+match[0].decode())
+					print(ofmt["match"].format(range=match.span(), match=match[0].decode()))
+
+				# Handle duplicate matches
+				if parsedArgs.no_duplicates:
+					matchedStrings.append(match[0].decode())
+
+				# Handle --match-limit, --dir-match-limit, and --total-match-limit
+				if (_FML!=0 and matchIndex>=_FML) or\
+				   (_DML!=0 and dirData[fileDir]["matches"]>=_DML) or\
+				   (_TML!=0 and totalMatches>=_TML):
+					break
+
+			# Print match count (--count)
+			if parsedArgs.count and matchIndex:
+				print(ofmt["count"].format(count=matchIndex))
 
 	except Exception as AAAAA:
 		print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}", file=sys.stderr)
