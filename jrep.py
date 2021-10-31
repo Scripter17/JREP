@@ -8,23 +8,14 @@ import argparse, os, sys, re, glob, mmap, copy, itertools
 	(Can be treated as public domain if your project requires that)
 """
 
-"""
-	TODO:
-	- Better --verbose
-	- Optimize -Nd
-	- CLEAN THE CODE OH MY GOD
-"""
+parser=argparse.ArgumentParser()
 
-class CustomHelpFormatter(argparse.HelpFormatter):
-	def _fill_text(self, text, width, indent):
-		print(text, width, indent)
-
-parser=argparse.ArgumentParser(formatter_class=CustomHelpFormatter)
-
-parser.add_argument("regex"                 ,       nargs="+", default=[""], help="Regex to test file contents for. omit to always match")
+parser.add_argument("regex"                 ,       nargs="*", default=[""], help="Regexes to process matches for")
 parser.add_argument("--string"              , "-s", action="store_true"    , help="Test for strings instead of regex")
 parser.add_argument("--no-duplicates"       , "-D", action="store_true"    , help="Don't print duplicate matches")
-parser.add_argument("--anti-regex"          ,       nargs="+", default=[]  , help="Regexes for files to not match")
+
+parser.add_argument("--file-regex"          ,       nargs="+", default=[], help="Regexes files must match to be processed (unimplemented)")
+parser.add_argument("--file-anti-regex"     ,       nargs="+", default=[], help="Regexes for files to not match")
 
 parser.add_argument("--files"               , "-f", nargs="+", default=[], help="The file(s) to check")
 parser.add_argument("--globs"               , "-g", nargs="+", default=[], help="The glob(s) to check")
@@ -76,7 +67,6 @@ _header=not parsedArgs.no_headers
 _mOffs1=parsedArgs.print_match_offset or parsedArgs.print_match_range
 _mOffs2=parsedArgs.print_match_range
 _mRange=("{range[0]:08x}"*_mOffs1)+("-{range[1]:08x}"*_mOffs2)
-_mPrint=not parsedArgs.dont_print_matches
 _mAt=_header and _mOffs1
 _mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 
@@ -84,7 +74,7 @@ _mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 ofmt={
 	"dname": (("Directory: "  *_header)+        "{dname}") * parsedArgs.print_directories,
 	"fname": (("File: "       *_header)+        "{fname}") * parsedArgs.print_file_names,
-	"match": (("Match"        *_header)+_mRange+"{match}") * _mPrint,
+	"match": (("Match"        *_header)+_mRange+"{match}") * (not parsedArgs.dont_print_matches),
 	"count": (("Count: "      *_header)+        "{count}") * parsedArgs.count,
 	"total": (("Total count: "*_header)+        "{count}") * parsedArgs.total_count,
 }
@@ -154,6 +144,7 @@ def getFiles():
 		"""
 			Get a raw list of files selected with --file and --glob
 			This is just here so I don't have to write the mmap code twice
+			Probably could replace the array addition with a few `yield from`s
 		"""
 		if not os.isatty(sys.stdin.fileno()):
 			if parsedArgs.stdin_files:
@@ -185,9 +176,9 @@ def getFiles():
 	for file in _getFiles():
 		if parsedArgs.verbose:
 			print(f"Verbose: Processing file \"{file}\"")
-		
+
 		_processDir(file) # Handle --print-directories
-		
+
 		if os.path.isfile(file):
 			try:
 				with open(file) as f:
@@ -230,16 +221,34 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	dirData[fileDir]["files"]+=1
 
 	# Handle --name-regex, --full-name-regex, --name-anti-regex, and--full-name-anti-regex
-	if not (all([re.search(x, file["name"]                  ) for x in parsedArgs.name_regex]          ) and\
-	        all([re.search(x, os.path.realpath(file["name"])) for x in parsedArgs.full_name_regex]     ) and\
-	   not  any([re.search(x, file["name"]                  ) for x in parsedArgs.name_anti_regex]     ) and\
+	if not (all([re.search(x,                  file["name"] ) for x in parsedArgs.name_regex          ]) and\
+	        all([re.search(x, os.path.realpath(file["name"])) for x in parsedArgs.full_name_regex     ]) and\
+	   not  any([re.search(x,                  file["name"] ) for x in parsedArgs.name_anti_regex     ]) and\
 	   not  any([re.search(x, os.path.realpath(file["name"])) for x in parsedArgs.full_name_anti_regex])):
 		# Really should make how this works configurable
 		if parsedArgs.verbose:
 			print(f"Verbose: File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
 		continue
+
+	# Main matching stuff
 	try:
 		printedName=False
+
+		# Handle --file-regex and --file-anti-regex
+		vibeCheckFailed=False
+		# --file-regex
+		for fileRegex in parsedArgs.file_regex:
+			if not re.search(fileRegex.encode(errors="ignore"), file["data"]):
+				vibeCheckFailed=True
+				break
+		# --file-anti-regex
+		for fileAntiRegex in parsedArgs.file_anti_regex:
+			if re.search(fileAntiRegex.encode(errors="ignore"), file["data"]):
+				vibeCheckFailed=True
+				break
+		if vibeCheckFailed:
+			continue
+
 		for regex in parsedArgs.regex:
 			# Turn regex into bytes
 			regex=regex.encode(errors="ignore")
@@ -254,16 +263,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			else:
 				matches=re.finditer(regex, file["data"])
 
-			antiRegexMatch=False
-			for antiRegex in parsedArgs.anti_regex:
-				if re.search(antiRegex.encode(errors="ignore"), file["data"]):
-					antiRegexMatch=True
-					break
-			if antiRegexMatch:
-				continue
-
 			# Process matches
-			matchIndex=0
+			matchIndex=0 # Just makes --count stuff easier
 			for matchIndex, match in enumerate(matches, start=1):
 				# Print file name
 				if parsedArgs.print_file_names and not printedName:
@@ -298,7 +299,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					#print(mHeader+match[0].decode())
 					print(ofmt["match"].format(range=match.span(), match=match[0].decode()))
 
-				# Handle duplicate matches
+				# Handle --no-duplicates
 				if parsedArgs.no_duplicates:
 					matchedStrings.append(match[0].decode())
 
