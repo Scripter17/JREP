@@ -10,7 +10,7 @@ import argparse, os, sys, re, glob, mmap, copy, itertools
 
 parser=argparse.ArgumentParser()
 
-parser.add_argument("regex"                 ,       nargs="?", default="", help="Regexes to process matches for")
+parser.add_argument("regex"                 ,       nargs="?", default="", help="Regex to process matches for")
 parser.add_argument("--string"              , "-s", action="store_true"  , help="Test for strings instead of regex")
 parser.add_argument("--no-duplicates"       , "-D", action="store_true"  , help="Don't print duplicate matches")
 
