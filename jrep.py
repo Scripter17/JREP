@@ -260,17 +260,19 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		if antiRegexMatch:
 			continue
 
-		# Print file name
-		if matches and parsedArgs.print_file_names:
-			#print(fHeader+(os.path.realpath(file["name"]) if parsedArgs.print_full_paths else file["name"]))
-			fname=file["name"]
-			if parsedArgs.print_full_paths:  fname=os.path.realpath(fname)
-			if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
-			print(ofmt["fname"].format(fname=fname))
-
 		# Process matches
 		matchIndex=0
+		printedName=False
 		for matchIndex, match in enumerate(matches, start=1):
+			# Print file name
+			if parsedArgs.print_file_names and not printedName:
+				#print(fHeader+(os.path.realpath(file["name"]) if parsedArgs.print_full_paths else file["name"]))
+				fname=file["name"]
+				if parsedArgs.print_full_paths:  fname=os.path.realpath(fname)
+				if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
+				print(ofmt["fname"].format(fname=fname))
+				printedName=True
+
 			totalMatches+=1
 			dirData[fileDir]["matches"]+=1
 
