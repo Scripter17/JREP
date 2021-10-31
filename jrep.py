@@ -241,6 +241,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			if not re.search(fileRegex.encode(errors="ignore"), file["data"]):
 				vibeCheckFailed=True
 				break
+		if vibeCheckFailed:
+			continue
 		# --file-anti-regex
 		for fileAntiRegex in parsedArgs.file_anti_regex:
 			if re.search(fileAntiRegex.encode(errors="ignore"), file["data"]):
