@@ -164,7 +164,7 @@ def getFiles():
 		if os.path.isfile(dname):
 			dname=os.path.dirname(dname)
 		dname=dname or "."
-		if parsedArgs.print_full_paths:  dname=os.path.realpath(dname)
+		if parsedArgs.print_full_paths : dname=os.path.realpath(dname)
 		if parsedArgs.print_posix_paths: dname=dname.replace("\\", "/")
 		if parsedArgs.print_directories and dname not in exploredDirs:
 			print(ofmt["dname"].format(dname=dname))
@@ -286,7 +286,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			if parsedArgs.print_file_names and not printedName:
 				#print(fHeader+(os.path.realpath(file["name"]) if parsedArgs.print_full_paths else file["name"]))
 				fname=file["name"]
-				if parsedArgs.print_full_paths:  fname=os.path.realpath(fname)
+				if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
 				if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
 				print(ofmt["fname"].format(fname=fname))
 				printedName=True
