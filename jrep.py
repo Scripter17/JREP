@@ -249,20 +249,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		printedName=False
 
 		# Handle --file-regex and --file-anti-regex
-		vibeCheckFailed=False
-		# --file-regex
-		for fileRegex in parsedArgs.file_regex:
-			if not re.search(fileRegex.encode(errors="ignore"), file["data"]):
-				vibeCheckFailed=True
-				break
-		if vibeCheckFailed:
-			continue
-		# --file-anti-regex
-		for fileAntiRegex in parsedArgs.file_anti_regex:
-			if re.search(fileAntiRegex.encode(errors="ignore"), file["data"]):
-				vibeCheckFailed=True
-				break
-		if vibeCheckFailed:
+		_regexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
+		if any(map(_regexCheck, parsedArgs.file_anti_regex)) or not all(map(_regexCheck, parsedArgs.file_regex)):
 			continue
 
 		# Main regex handling
