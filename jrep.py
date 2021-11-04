@@ -180,16 +180,25 @@ def getFiles():
 		_processDir(file) # Handle --print-directories
 
 		if os.path.isfile(file):
-			try:
-				with open(file) as f:
-					# Stream data from file instead of loading a 2.6GB file into RAM
-					try:
-						mmapFile=mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-					except ValueError:
-						mmapFile=b""
-					yield {"name": file, "data":mmapFile}
-			except Exception as AAAAA:
-				print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\"", file=sys.stderr)
+			if parsedArgs.regex=="" and\
+			   parsedArgs.dont_print_matches and\
+			   not parsedArgs.count and\
+			   not parsedArgs.total_count and\
+			   not parsedArgs.file_match_limit and\
+			   not parsedArgs.dir_match_limit and\
+			   not parsedArgs.total_match_limit:
+				yield {"name":file, "data":b""}
+			else:
+				try:
+					with open(file) as f:
+						# Stream data from file instead of loading a 2.6GB file into RAM
+						try:
+							mmapFile=mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+						except ValueError:
+							mmapFile=b""
+						yield {"name": file, "data":mmapFile}
+				except Exception as AAAAA:
+					print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\"", file=sys.stderr)
 
 # Abbreviations to make my editor not show a horizontal scrollbar (my version of PEP8)
 _FML=parsedArgs.file_match_limit
