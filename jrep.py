@@ -40,7 +40,7 @@ parser.add_argument("--print-match-range"   , "-O", action="store_true"  , help=
 parser.add_argument("--count"               , "-c", action="store_true"  , help="Count matches per file")
 parser.add_argument("--total-count"         , "-C", action="store_true"  , help="Total --count of all files")
 
-parser.add_argument("--replace"             , "-r",                        help="Regex replacement")
+parser.add_argument("--replace"             , "-r", nargs="+", default=[], help="Regex replacement")
 parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after -r")
 parser.add_argument("--escape"              , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
@@ -246,7 +246,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# Main matching stuff
 	_continue=False
-	for regex in parsedArgs.regex:
+	for regexIndex, regex in enumerate(parsedArgs.regex):
 		try:
 			printedName=False
 
@@ -265,8 +265,12 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				regex=re.escape(regex)
 
 			# Arguably should be an elif but this is easier to mentally process
-			if parsedArgs.replace!=None:
-				matches=findAllSubs(regex, parsedArgs.replace.encode(errors="ignore"), file["data"])
+			if parsedArgs.replace:
+				if len(parsedArgs.replace)==1:
+					replacement=parsedArgs.replace[0]
+				elif len(parsedArgs.replace)==len(parsedArgs.regex):
+					replacement=parsedArgs.replace[regexIndex]
+				matches=findAllSubs(regex, replacement.encode(errors="ignore"), file["data"])
 			else:
 				matches=re.finditer(regex, file["data"])
 
