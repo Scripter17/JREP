@@ -53,13 +53,13 @@ parser.add_argument("--total-file-limit"    , "--tfl", type=int, default=0, help
 parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
 parsedArgs=parser.parse_args()
 
-if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
-	print("Error: Length of --replace must be either 1 or equal to the number of regexes", file=sys.stderr)
-	exit(1)
-
 if parsedArgs.verbose:
 	print("Verbose: JREP preview version")
 	print(parsedArgs)
+
+if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
+	print("Error: Length of --replace must be either 1 or equal to the number of regexes", file=sys.stderr)
+	exit(1)
 
 # Simple implementation of --escape
 if parsedArgs.escape:
