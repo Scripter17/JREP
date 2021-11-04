@@ -147,12 +147,13 @@ def getFiles():
 			This is just here so I don't have to write the mmap code twice
 			Probably could replace the array addition with a few `yield from`s
 		"""
-		if not os.isatty(sys.stdin.fileno()):
-			if parsedArgs.stdin_files:
-				parsedArgs.file=sys.stdin.read().splitlines()+parsedArgs.file
-			elif parsedArgs.stdin_globs:
-				parsedArgs.glob=sys.stdin.read().splitlines()+parsedArgs.glob
+		# Files
+		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_files:
+			yield from sys.stdin.read().splitlines()
 		yield from parsedArgs.file # Whoever decided to add yield from: Thank you
+		# Globs
+		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_globs:
+			parsedArgs.glob=sys.stdin.read().splitlines()+parsedArgs.glob
 		for pattern in parsedArgs.glob:
 			yield from glob.iglob(pattern, recursive=True)
 
