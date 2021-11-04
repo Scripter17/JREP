@@ -84,6 +84,22 @@ ofmt={
 	"total": (("Total count: "*_header)+        "{count}") * parsedArgs.total_count,
 }
 
+class JSObj:
+	"""
+		[J]ava[S]cript [Obj]ects
+		JavaScript allows both {"a":1}.a and {"a":1}["a"]
+		This class mimicks that
+	"""
+	def __init__(self, obj): object.__setattr__(self, "obj", copy.copy(obj))
+
+	def __getattr__(self, key):      return self.obj[key]
+	def __setattr__(self, key, val):        self.obj[key]=val
+	def __delattr__(self, key):      del    self.obj[key]
+
+	def __getitem__(self, key):      return self.obj[key]
+	def __setitem__(self, key, val):        self.obj[key]=val
+	def __delitem__(self, key):      del    self.obj[key]
+
 def sortFiles(files, key=None):
 	"""
 		Sorts files if --sort is present
@@ -106,31 +122,17 @@ def sortFiles(files, key=None):
 
 	return sorted(files, key=sorts[key])
 
-class JSObj:
-	"""
-		[J]ava[S]cript [Obj]ects
-		JavaScript allows both {"a":1}.a and {"a":1}["a"]
-		This class mimicks that
-	"""
-	def __init__(self, obj): object.__setattr__(self, "obj", copy.copy(obj))
-
-	def __getattr__(self, key):      return self.obj[key]
-	def __setattr__(self, key, val):        self.obj[key]=val
-	def __delattr__(self, key):      del    self.obj[key]
-
-	def __getitem__(self, key):      return self.obj[key]
-	def __setitem__(self, key, val):        self.obj[key]=val
-	def __delitem__(self, key):      del    self.obj[key]
-
 def findAllSubs(pattern, replace, string):
 	"""
 		re.sub but yield all replaced substrings instead of returning the final string
-		This is a very slow function but it works... somehow
+		This is a very slow function but it works
+		Runs re.sub with the count kwarg set to increasing values
+		It uses this to keep track of how much the string length changes to find out what parts of the result to return
 	"""
 	offs=0
 	last=string
-	for index, match in enumerate(re.finditer(pattern, string)):
-		subbed=re.sub(pattern, replace, string, count=index+1)
+	for index, match in enumerate(re.finditer(pattern, string), start=1):
+		subbed=re.sub(pattern, replace, string, count=index)
 		loffs=offs
 		offs+=len(subbed)-len(last)
 		yield JSObj({
@@ -144,6 +146,7 @@ def getFiles():
 		Yields files selected with --file and --glob as {"file":filename, "data":mmapFile/bytes}
 		Stdin has a filename of -
 		Empty files and stdin use a bytes object instead of mmap
+		If the contents of a file are irrelevant, b"" is always used instead of mmap
 	"""
 	def _getFiles():
 		"""
@@ -157,7 +160,8 @@ def getFiles():
 		yield from parsedArgs.file # Whoever decided to add yield from: Thank you
 		# Globs
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_globs:
-			parsedArgs.glob=sys.stdin.read().splitlines()+parsedArgs.glob
+			for pattern in sys.stdin.read().splitlines():
+				yield from glob.iglob(pattern, recursive=True)
 		for pattern in parsedArgs.glob:
 			yield from glob.iglob(pattern, recursive=True)
 
@@ -186,15 +190,11 @@ def getFiles():
 		_processDir(file) # Handle --print-directories
 
 		if os.path.isfile(file):
-			if parsedArgs.dont_print_matches and\
-			   not parsedArgs.regex and\
-			   not parsedArgs.count and\
-			   not parsedArgs.total_count and\
-			   not parsedArgs.file_match_limit and\
-			   not parsedArgs.dir_match_limit and\
-			   not parsedArgs.total_match_limit and\
-			   not parsedArgs.file_regex and\
-			   not parsedArgs.file_anti_regex:
+			if parsedArgs.dont_print_matches\
+			   and not parsedArgs.regex           and not parsedArgs.count\
+			   and not parsedArgs.total_count     and not parsedArgs.file_match_limit\
+			   and not parsedArgs.dir_match_limit and not parsedArgs.total_match_limit\
+			   and not parsedArgs.file_regex      and not parsedArgs.file_anti_regex:
 				# Does the file content matter? No? Ignore it then
 				yield {"name":file, "data":b""}
 			else:
@@ -239,28 +239,27 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	dirData[fileDir]["files"]+=1
 
 	# Handle --name-regex, --full-name-regex, --name-anti-regex, and--full-name-anti-regex
-	if not (all([re.search(x,                  file["name"] ) for x in parsedArgs.name_regex          ]) and\
-	        all([re.search(x, os.path.realpath(file["name"])) for x in parsedArgs.full_name_regex     ]) and\
-	   not  any([re.search(x,                  file["name"] ) for x in parsedArgs.name_anti_regex     ]) and\
-	   not  any([re.search(x, os.path.realpath(file["name"])) for x in parsedArgs.full_name_anti_regex])):
+	if not all(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_regex          )) or\
+	   not all(map(lambda x:re.search(x, os.path.realpath(file["name"])), parsedArgs.full_name_regex     )) or\
+	       any(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_anti_regex     )) or\
+	       any(map(lambda x:re.search(x, os.path.realpath(file["name"])), parsedArgs.full_name_anti_regex)):
 		# Really should make how this works configurable
 		if parsedArgs.verbose:
 			print(f"Verbose: File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
 		continue
 
 	# Main matching stuff
-	_continue=False
+	_continue=False # PEP-3136 would've come in clutch here
 	for regexIndex, regex in enumerate(parsedArgs.regex):
 		try:
 			printedName=False
 
 			# Handle --file-regex and --file-anti-regex
-			_regexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
-			if any(map(_regexCheck, parsedArgs.file_anti_regex)) or not all(map(_regexCheck, parsedArgs.file_regex)):
+			_fileRegexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
+			if any(map(_fileRegexCheck, parsedArgs.file_anti_regex)) or not all(map(_fileRegexCheck, parsedArgs.file_regex)):
 				_continue=True
 				break
 
-			# Main regex handling
 			# Turn regex into bytes
 			regex=regex.encode(errors="ignore")
 
@@ -268,7 +267,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			if parsedArgs.string:
 				regex=re.escape(regex)
 
-			# Arguably should be an elif but this is easier to mentally process
+			# Handle --replace
 			if parsedArgs.replace:
 				if len(parsedArgs.replace)==1:
 					replacement=parsedArgs.replace[0]
@@ -283,7 +282,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			for matchIndex, match in enumerate(matches, start=1):
 				# Print file name
 				if parsedArgs.print_file_names and not printedName:
-					#print(fHeader+(os.path.realpath(file["name"]) if parsedArgs.print_full_paths else file["name"]))
 					fname=file["name"]
 					if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
 					if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
@@ -311,7 +309,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 				# Print matches
 				if not parsedArgs.dont_print_matches and match[0].decode() not in matchedStrings:
-					#print(mHeader+match[0].decode())
 					print(ofmt["match"].format(range=match.span(), match=match[0].decode()))
 
 				# Handle --no-duplicates
