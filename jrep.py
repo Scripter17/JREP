@@ -14,9 +14,6 @@ parser.add_argument("regex"                 ,       nargs="?", default="", help=
 parser.add_argument("--string"              , "-s", action="store_true"  , help="Test for strings instead of regex")
 parser.add_argument("--no-duplicates"       , "-D", action="store_true"  , help="Don't print duplicate matches")
 
-parser.add_argument("--file-regex"          ,       nargs="+", default=[], help="Regexes files must match to be processed (unimplemented)")
-parser.add_argument("--file-anti-regex"     ,       nargs="+", default=[], help="Regexes for files to not match")
-
 parser.add_argument("--file"                , "-f", nargs="+", default=[], help="The file(s) to check")
 parser.add_argument("--glob"                , "-g", nargs="+", default=[], help="The glob(s) to check")
 
@@ -24,10 +21,12 @@ _stdin=parser.add_mutually_exclusive_group()
 _stdin.add_argument("--stdin-files"         , "-F", action="store_true"  , help="Treat STDIN as a list of files")
 _stdin.add_argument("--stdin-globs"         , "-G", action="store_true"  , help="Treat STDIN as a list of globs")
 
-parser.add_argument("--name-regex"          , "-t", nargs="+", default=[], help="Regex to test against relative file name")
-parser.add_argument("--full-name-regex"     , "-T", nargs="+", default=[], help="Regex to test against absolute file name")
+parser.add_argument("--name-regex"          , "-t", nargs="+", default=[], help="Regex to test relative file names for")
+parser.add_argument("--full-name-regex"     , "-T", nargs="+", default=[], help="Regex to test absolute file names for")
 parser.add_argument("--name-anti-regex"     ,       nargs="+", default=[], help="Like --name-regex      but excludes file names that match")
 parser.add_argument("--full-name-anti-regex",       nargs="+", default=[], help="Like --full-name-regex but excludes file names that match")
+parser.add_argument("--file-regex"          ,       nargs="+", default=[], help="Regexes to test file contents for")
+parser.add_argument("--file-anti-regex"     ,       nargs="+", default=[], help="Like --file-regex but excludes files that match")
 
 parser.add_argument("--sort"                , "-S",                        help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse")
 parser.add_argument("--no-headers"          , "-H", action="store_true"  , help="Don't print match: or file: before lines")
