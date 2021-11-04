@@ -180,13 +180,16 @@ def getFiles():
 		_processDir(file) # Handle --print-directories
 
 		if os.path.isfile(file):
-			if parsedArgs.regex=="" and\
-			   parsedArgs.dont_print_matches and\
+			if parsedArgs.dont_print_matches and\
+			   not parsedArgs.regex and\
 			   not parsedArgs.count and\
 			   not parsedArgs.total_count and\
 			   not parsedArgs.file_match_limit and\
 			   not parsedArgs.dir_match_limit and\
-			   not parsedArgs.total_match_limit:
+			   not parsedArgs.total_match_limit and\
+			   not parsedArgs.file_regex and\
+			   not parsedArgs.file_anti_regex:
+				# Does the file content matter? No? Ignore it then
 				yield {"name":file, "data":b""}
 			else:
 				try:
