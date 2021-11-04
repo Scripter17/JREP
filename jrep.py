@@ -10,9 +10,9 @@ import argparse, os, sys, re, glob, mmap, copy, itertools
 
 parser=argparse.ArgumentParser()
 
-parser.add_argument("regex"                 ,       nargs="?", default="", help="Regex to process matches for")
-parser.add_argument("--string"              , "-s", action="store_true"  , help="Test for strings instead of regex")
-parser.add_argument("--no-duplicates"       , "-D", action="store_true"  , help="Don't print duplicate matches")
+parser.add_argument("regex"                 ,       nargs="*", default=[""], help="Regex(es) to process matches for")
+parser.add_argument("--string"              , "-s", action="store_true"    , help="Test for strings instead of regex")
+parser.add_argument("--no-duplicates"       , "-D", action="store_true"    , help="Don't print duplicate matches")
 
 parser.add_argument("--file"                , "-f", nargs="+", default=[], help="The file(s) to check")
 parser.add_argument("--glob"                , "-g", nargs="+", default=[], help="The glob(s) to check")
@@ -196,7 +196,7 @@ def getFiles():
 			else:
 				try:
 					with open(file) as f:
-						# Stream data from file instead of loading a 2.6GB file into RAM
+						# Stream data from file instead of loading a 48.2TB file into RAM
 						try:
 							mmapFile=mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
 						except ValueError:
@@ -245,80 +245,85 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		continue
 
 	# Main matching stuff
-	try:
-		printedName=False
+	_continue=False
+	for regex in parsedArgs.regex:
+		try:
+			printedName=False
 
-		# Handle --file-regex and --file-anti-regex
-		_regexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
-		if any(map(_regexCheck, parsedArgs.file_anti_regex)) or not all(map(_regexCheck, parsedArgs.file_regex)):
-			continue
-
-		# Main regex handling
-		# Turn regex into bytes
-		regex=parsedArgs.regex.encode(errors="ignore")
-
-		# Probably a bad idea
-		if parsedArgs.string:
-			regex=re.escape(regex)
-
-		# Arguably should be an elif but this is easier to mentally process
-		if parsedArgs.replace!=None:
-			matches=findAllSubs(regex, parsedArgs.replace.encode(errors="ignore"), file["data"])
-		else:
-			matches=re.finditer(regex, file["data"])
-
-		# Process matches
-		matchIndex=0 # Just makes --count stuff easier
-		for matchIndex, match in enumerate(matches, start=1):
-			# Print file name
-			if parsedArgs.print_file_names and not printedName:
-				#print(fHeader+(os.path.realpath(file["name"]) if parsedArgs.print_full_paths else file["name"]))
-				fname=file["name"]
-				if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
-				if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
-				print(ofmt["fname"].format(fname=fname))
-				printedName=True
-
-			totalMatches+=1
-			dirData[fileDir]["matches"]+=1
-
-			# Quick optimization for when someone just wants filenames that have a match
-			if parsedArgs.dont_print_matches and\
-			   not parsedArgs.count and\
-			   not parsedArgs.total_count and\
-			   not _FML and not _DML and not _TML:
+			# Handle --file-regex and --file-anti-regex
+			_regexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
+			if any(map(_regexCheck, parsedArgs.file_anti_regex)) or not all(map(_regexCheck, parsedArgs.file_regex)):
+				_continue=True
 				break
 
-			# Handle --sub
-			# TYSM mCoding for explaining how zip works
-			# (zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
-			for pair in zip(parsedArgs.sub[0::2], parsedArgs.sub[1::2]):
-				match=JSObj({
-					0     : re.sub(pair[0].encode(), pair[1].encode(), match[0]),
-					"span": match.span
-				})
+			# Main regex handling
+			# Turn regex into bytes
+			regex=regex.encode(errors="ignore")
 
-			# Print matches
-			if not parsedArgs.dont_print_matches and match[0].decode() not in matchedStrings:
-				#print(mHeader+match[0].decode())
-				print(ofmt["match"].format(range=match.span(), match=match[0].decode()))
+			# Probably a bad idea
+			if parsedArgs.string:
+				regex=re.escape(regex)
 
-			# Handle --no-duplicates
-			if parsedArgs.no_duplicates:
-				matchedStrings.append(match[0].decode())
+			# Arguably should be an elif but this is easier to mentally process
+			if parsedArgs.replace!=None:
+				matches=findAllSubs(regex, parsedArgs.replace.encode(errors="ignore"), file["data"])
+			else:
+				matches=re.finditer(regex, file["data"])
 
-			# Handle --match-limit, --dir-match-limit, and --total-match-limit
-			if (_FML!=0 and matchIndex>=_FML) or\
-			   (_DML!=0 and dirData[fileDir]["matches"]>=_DML) or\
-			   (_TML!=0 and totalMatches>=_TML):
-				break
+			# Process matches
+			matchIndex=0 # Just makes --count stuff easier
+			for matchIndex, match in enumerate(matches, start=1):
+				# Print file name
+				if parsedArgs.print_file_names and not printedName:
+					#print(fHeader+(os.path.realpath(file["name"]) if parsedArgs.print_full_paths else file["name"]))
+					fname=file["name"]
+					if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
+					if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
+					print(ofmt["fname"].format(fname=fname))
+					printedName=True
 
-		# Print match count (--count)
-		if parsedArgs.count and matchIndex:
-			print(ofmt["count"].format(count=matchIndex))
+				totalMatches+=1
+				dirData[fileDir]["matches"]+=1
 
-	except Exception as AAAAA:
-		print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}", file=sys.stderr)
+				# Quick optimization for when someone just wants filenames that have a match
+				if parsedArgs.dont_print_matches and\
+				   not parsedArgs.count and\
+				   not parsedArgs.total_count and\
+				   not _FML and not _DML and not _TML:
+					break
+
+				# Handle --sub
+				# TYSM mCoding for explaining how zip works
+				# (zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
+				for pair in zip(parsedArgs.sub[0::2], parsedArgs.sub[1::2]):
+					match=JSObj({
+						0     : re.sub(pair[0].encode(), pair[1].encode(), match[0]),
+						"span": match.span
+					})
+
+				# Print matches
+				if not parsedArgs.dont_print_matches and match[0].decode() not in matchedStrings:
+					#print(mHeader+match[0].decode())
+					print(ofmt["match"].format(range=match.span(), match=match[0].decode()))
+
+				# Handle --no-duplicates
+				if parsedArgs.no_duplicates:
+					matchedStrings.append(match[0].decode())
+
+				# Handle --match-limit, --dir-match-limit, and --total-match-limit
+				if (_FML!=0 and matchIndex>=_FML) or\
+				   (_DML!=0 and dirData[fileDir]["matches"]>=_DML) or\
+				   (_TML!=0 and totalMatches>=_TML):
+					break
+
+			# Print match count (--count)
+			if parsedArgs.count and matchIndex:
+				print(ofmt["count"].format(count=matchIndex))
+
+		except Exception as AAAAA:
+			print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}", file=sys.stderr)
+	if _continue:
+		continue
 
 	# Hanlde --total-match-limit and --total-file-limit
 	if (_TML!=0 and totalMatches>=_TML) or (_TFL!=0 and fileIndex>=_TFL):
