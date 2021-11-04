@@ -54,12 +54,14 @@ parser.add_argument("--verbose"             , "-v", action="store_true"  , help=
 parsedArgs=parser.parse_args()
 
 if parsedArgs.verbose:
-	print("JREP preview version")
+	print("Verbose: JREP preview version")
 	print(parsedArgs)
 
 # Simple implementation of --escape
 if parsedArgs.escape:
+	print("Verbose: Added --escape args to --sub")
 	parsedArgs.sub.extend(["\\", "\\\\", "\r", "\\r", "\n", "\\n"])
+	print("Verbose: --sub is now", parsedArgs.sub)
 
 # Dumb output fstring generation stuff
 _header=not parsedArgs.no_headers
