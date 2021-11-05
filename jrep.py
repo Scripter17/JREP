@@ -155,10 +155,14 @@ def getFiles():
 			Probably could replace the array addition with a few `yield from`s
 		"""
 		# Files
+		if parsedArgs.verbose:
+			print("Verbose: Yielding files")
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_files:
 			yield from sys.stdin.read().splitlines()
 		yield from parsedArgs.file # Whoever decided to add yield from: Thank you
 		# Globs
+		if parsedArgs.verbose:
+			print("Verbose: Yielding globs") # r/PythonOOC
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_globs:
 			for pattern in sys.stdin.read().splitlines():
 				yield from glob.iglob(pattern, recursive=True)
@@ -180,6 +184,8 @@ def getFiles():
 
 	# Add stdin as a file
 	if not os.isatty(sys.stdin.fileno()) and not parsedArgs.stdin_files and not parsedArgs.stdin_globs:
+		if parsedArgs.verbose:
+			print("Verbose: Processing STDIN")
 		yield {"name":"-", "data":sys.stdin.read().encode(errors="ignore")}
 
 	exploredDirs=[]
@@ -196,6 +202,8 @@ def getFiles():
 			   and not parsedArgs.dir_match_limit and not parsedArgs.total_match_limit\
 			   and not parsedArgs.file_regex      and not parsedArgs.file_anti_regex:
 				# Does the file content matter? No? Ignore it then
+				if parsedArgs.verbose:
+					print("Verbose: Optimizing away actually opening the file")
 				yield {"name":file, "data":b""}
 			else:
 				try:
@@ -251,6 +259,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	# Main matching stuff
 	_continue=False # PEP-3136 would've come in clutch here
 	for regexIndex, regex in enumerate(parsedArgs.regex):
+		if parsedArgs.verbose:
+			print(f"Verbose: handling regex {regexIndex}: {regex}")
 		try:
 			printedName=False
 
@@ -296,6 +306,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				   not parsedArgs.count and\
 				   not parsedArgs.total_count and\
 				   not _FML and not _DML and not _TML:
+					if parsedArgs.verbose:
+						print("Verbose: Optimizing away actually reading the file")
 					break
 
 				# Handle --sub
