@@ -37,8 +37,6 @@ parser.add_argument("--print-posix-paths"   , "-P", action="store_true"  , help=
 parser.add_argument("--dont-print-matches"  , "-N", action="store_true"  , help="Don't print matches (use with -n to only print names)")
 parser.add_argument("--print-match-offset"  , "-o", action="store_true"  , help="Print the match offset (ignores -H)")
 parser.add_argument("--print-match-range"   , "-O", action="store_true"  , help="Print the match range  (implies -o)")
-parser.add_argument("--count"               , "-c", action="store_true"  , help="Count matches per file")
-parser.add_argument("--total-count"         , "-C", action="store_true"  , help="Total --count of all files")
 
 parser.add_argument("--replace"             , "-r", nargs="+", default=[], help="Regex replacement")
 parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after -r")
@@ -49,6 +47,17 @@ parser.add_argument("--dir-match-limit"     , "--dml", type=int, default=0, help
 parser.add_argument("--total-match-limit"   , "--tml", type=int, default=0, help="Max matches overall")
 parser.add_argument("--dir-file-limit"      , "--dfl", type=int, default=0, help="Max files per directory")
 parser.add_argument("--total-file-limit"    , "--tfl", type=int, default=0, help="Max files overall")
+parser.add_argument("--total-dir-limit"     , "--tdl", type=int, default=0, help="Max dirs overall")
+
+parser.add_argument("--file-match-count"    , "--fmc", "-c", action="store_true", help="Count matches per file")
+parser.add_argument("--dir-match-count"     , "--dmc",       action="store_true", help="Count matches per directory")
+parser.add_argument("--total-match-count"   , "--tmc", "-C", action="store_true", help="Count matches overall")
+parser.add_argument("--dir-file-count"      , "--dfc",       action="store_true", help="Count files per directory")
+parser.add_argument("--total-file-count"    , "--tfc",       action="store_true", help="Count files overall")
+parser.add_argument("--total-dir-count"     , "--tdc",       action="store_true", help="Count dirs overall")
+
+#parser.add_argument("--count"               , "-c", action="store_true"  , help="Count matches per file")
+#parser.add_argument("--total-count"         , "-C", action="store_true"  , help="Total --count of all files")
 
 parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
 parsedArgs=parser.parse_args()
@@ -63,9 +72,11 @@ if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedAr
 
 # Simple implementation of --escape
 if parsedArgs.escape:
-	print("Verbose: Added --escape args to --sub")
+	if parsedArgs.verbose:
+		print("Verbose: Added --escape args to --sub")
 	parsedArgs.sub.extend(["\\", "\\\\", "\r", "\\r", "\n", "\\n"])
-	print("Verbose: --sub is now", parsedArgs.sub)
+	if parsedArgs.verbose:
+		print("Verbose: --sub is now", parsedArgs.sub)
 
 # Dumb output fstring generation stuff
 _header=not parsedArgs.no_headers
@@ -77,11 +88,16 @@ _mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 
 # Output fstrings to make later usage easier
 ofmt={
-	"dname": (("Directory: "  *_header)+        "{dname}") * parsedArgs.print_directories,
-	"fname": (("File: "       *_header)+        "{fname}") * parsedArgs.print_file_names,
-	"match": (("Match"        *_header)+_mRange+"{match}") * (not parsedArgs.dont_print_matches),
-	"count": (("Count: "      *_header)+        "{count}") * parsedArgs.count,
-	"total": (("Total count: "*_header)+        "{count}") * parsedArgs.total_count,
+	"dname": (("Directory: "        *_header)+        "{dname}") * parsedArgs.print_directories,
+	"fname": (("File: "             *_header)+        "{fname}") * parsedArgs.print_file_names,
+	"match": (("Match"              *_header)+_mRange+"{match}") * (not parsedArgs.dont_print_matches),
+
+	"fmcnt": (("File match count: " *_header)+        "{count}") * parsedArgs.file_match_count,
+	"dmcnt": (("Dir match count: "  *_header)+        "{count}") * parsedArgs.dir_match_count,
+	"dfcnt": (("Dir file count: "   *_header)+        "{count}") * parsedArgs.dir_file_count,
+	"tmcnt": (("Total match count: "*_header)+        "{count}") * parsedArgs.total_match_count,
+	"tfcnt": (("Total file count: " *_header)+        "{count}") * parsedArgs.total_file_count,
+	"tdcnt": (("Total dir count: "  *_header)+        "{count}") * parsedArgs.total_dir_count,
 }
 
 class JSObj:
@@ -141,6 +157,13 @@ def findAllSubs(pattern, replace, string):
 		})
 		last=subbed
 
+def fileContentsDontMatter():
+	return parsedArgs.dont_print_matches\
+	       and not any(parsedArgs.regex)       and not parsedArgs.file_match_limit\
+	       and not parsedArgs.dir_match_limit  and not parsedArgs.total_match_limit\
+	       and not parsedArgs.file_regex       and not parsedArgs.file_anti_regex\
+	       and not parsedArgs.file_match_count and not parsedArgs.dir_match_count and not parsedArgs.total_match_count
+
 def getFiles():
 	"""
 		Yields files selected with --file and --glob as {"file":filename, "data":mmapFile/bytes}
@@ -154,18 +177,24 @@ def getFiles():
 			This is just here so I don't have to write the mmap code twice
 			Probably could replace the array addition with a few `yield from`s
 		"""
+		
 		# Files
 		if parsedArgs.verbose:
 			print("Verbose: Yielding files")
+		# --stdin-files
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_files:
 			yield from sys.stdin.read().splitlines()
-		yield from parsedArgs.file # Whoever decided to add yield from: Thank you
+		# --file
+		yield from parsedArgs.file
+		
 		# Globs
 		if parsedArgs.verbose:
 			print("Verbose: Yielding globs") # r/PythonOOC
+		# --stdin-globs
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_globs:
 			for pattern in sys.stdin.read().splitlines():
 				yield from glob.iglob(pattern, recursive=True)
+		# --glob
 		for pattern in parsedArgs.glob:
 			yield from glob.iglob(pattern, recursive=True)
 
@@ -173,11 +202,7 @@ def getFiles():
 		"""
 			Print directory names if --print-directories is specified
 		"""
-		if os.path.isfile(dname):
-			dname=os.path.dirname(dname)
-		dname=dname or "."
-		if parsedArgs.print_full_paths : dname=os.path.realpath(dname)
-		if parsedArgs.print_posix_paths: dname=dname.replace("\\", "/")
+		dname=processDirName(dname)
 		if parsedArgs.print_directories and dname not in exploredDirs:
 			print(ofmt["dname"].format(dname=dname))
 			exploredDirs.append(dname)
@@ -196,15 +221,11 @@ def getFiles():
 		_processDir(file) # Handle --print-directories
 
 		if os.path.isfile(file):
-			if parsedArgs.dont_print_matches\
-			   and not parsedArgs.regex           and not parsedArgs.count\
-			   and not parsedArgs.total_count     and not parsedArgs.file_match_limit\
-			   and not parsedArgs.dir_match_limit and not parsedArgs.total_match_limit\
-			   and not parsedArgs.file_regex      and not parsedArgs.file_anti_regex:
+			if fileContentsDontMatter():
 				# Does the file content matter? No? Ignore it then
 				if parsedArgs.verbose:
 					print("Verbose: Optimizing away actually opening the file")
-				yield {"name":file, "data":b""}
+				yield {"name": file, "data": b"", "isDir": False}
 			else:
 				try:
 					with open(file) as f:
@@ -213,9 +234,24 @@ def getFiles():
 							mmapFile=mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
 						except ValueError:
 							mmapFile=b""
-						yield {"name": file, "data":mmapFile}
+						yield {"name": file, "data": mmapFile, "isDir": False}
 				except Exception as AAAAA:
 					print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\"", file=sys.stderr)
+		else:
+			yield {"name": file, "isDir": True}
+
+def processFileName(fname):
+	if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
+	if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
+	return fname
+
+def processDirName(dname):
+	if os.path.isfile(dname):
+		dname=os.path.dirname(dname)
+	dname=dname or "."
+	if parsedArgs.print_full_paths : dname=os.path.realpath(dname)
+	if parsedArgs.print_posix_paths: dname=dname.replace("\\", "/")
+	return dname
 
 # Abbreviations to make my editor not show a horizontal scrollbar (my version of PEP8)
 _FML=parsedArgs.file_match_limit
@@ -223,28 +259,18 @@ _DML=parsedArgs.dir_match_limit
 _TML=parsedArgs.total_match_limit
 _DFL=parsedArgs.dir_file_limit
 _TFL=parsedArgs.total_file_limit
+_TDL=parsedArgs.total_dir_limit
 
 # Tracking stuffs
 matchedStrings=[] # --no-duplicates handler
 dirData={} # --file-limit and --dir-match-limit
 totalMatches=0
-
+totalFiles=0
+fileDir=None
+lastDir=None
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
 	if parsedArgs.verbose:
 		print(f"Verbose: Processing {file}")
-
-	# For both --file-limit and --dir-match-limit
-	fileDir=os.path.dirname(file["name"])
-	if fileDir not in dirData:
-		if parsedArgs.verbose:
-			print(f"Verbose: Adding {fileDir} to dirData")
-		dirData[fileDir]={"files":0, "matches":0}
-
-	# Handle --file-limit
-	# Really slow on big directories
-	if (_DFL!=0 and dirData[fileDir]["files"]==_DFL) or (_DML!=0 and dirData[fileDir]["matches"]>=_DML):
-		continue
-	dirData[fileDir]["files"]+=1
 
 	# Handle --name-regex, --full-name-regex, --name-anti-regex, and--full-name-anti-regex
 	if not all(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_regex          )) or\
@@ -254,6 +280,37 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		# Really should make how this works configurable
 		if parsedArgs.verbose:
 			print(f"Verbose: File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
+		continue
+
+	# --file-limit, --dir-match-limit, --dir-file-count, and --dir-match-count
+	lastDir=fileDir
+	fileDir=file["name"]
+	if not file["isDir"]:
+		fileDir=os.path.dirname(fileDir)
+
+	# Keeps track of, well, directory data
+	if fileDir not in dirData:
+		if parsedArgs.verbose:
+			print(f"Verbose: Adding {fileDir} to dirData")
+		dirData[fileDir]={"files":0, "matches":0}
+
+	if _TDL and len(dirData.keys())>_TDL:
+		break
+
+	# --dir-match-count and --dir-file-count
+	if lastDir!=None and lastDir!=fileDir:
+		if parsedArgs.dir_match_count:
+			print(ofmt["dmcnt"].format(count=dirData[lastDir]["matches"]))
+		if parsedArgs.dir_file_count:
+			print(ofmt["dfcnt"].format(count=dirData[lastDir]["files"]))
+
+	# Handle --file-limit
+	# Really slow on big directories
+	if (_DFL!=0 and dirData[fileDir]["files"]==_DFL) or (_DML!=0 and dirData[fileDir]["matches"]>=_DML):
+		continue
+	dirData[fileDir]["files"]+=1
+
+	if file["isDir"]:
 		continue
 
 	# Main matching stuff
@@ -288,24 +345,20 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				matches=re.finditer(regex, file["data"])
 
 			# Process matches
-			matchIndex=0 # Just makes --count stuff easier
+			matchIndex=0 # Just makes --file-match-count stuff easier
 			for matchIndex, match in enumerate(matches, start=1):
 				# Print file name
-				if parsedArgs.print_file_names and not printedName:
-					fname=file["name"]
-					if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
-					if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
-					print(ofmt["fname"].format(fname=fname))
+				if not printedName:
+					if parsedArgs.print_file_names:
+						print(ofmt["fname"].format(fname=processFileName(file["name"])))
 					printedName=True
+					totalFiles+=1
 
 				totalMatches+=1
 				dirData[fileDir]["matches"]+=1
 
-				# Quick optimization for when someone just wants filenames that have a match
-				if parsedArgs.dont_print_matches and\
-				   not parsedArgs.count and\
-				   not parsedArgs.total_count and\
-				   not _FML and not _DML and not _TML:
+				# Quick optimization for when someone just wants filenames
+				if fileContentsDontMatter():
 					if parsedArgs.verbose:
 						print("Verbose: Optimizing away actually reading the file")
 					break
@@ -334,8 +387,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					break
 
 			# Print match count (--count)
-			if parsedArgs.count and matchIndex:
-				print(ofmt["count"].format(count=matchIndex))
+			if parsedArgs.file_match_count and matchIndex:
+				print(ofmt["fmcnt"].format(count=matchIndex))
 
 		except Exception as AAAAA:
 			print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}", file=sys.stderr)
@@ -346,6 +399,17 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	if (_TML!=0 and totalMatches>=_TML) or (_TFL!=0 and fileIndex>=_TFL):
 		break
 
-# Print total match count (--total-count)
-if parsedArgs.total_count:
-	print(ofmt["total"].format(count=totalMatches))
+# --dir-match-count and --dir-file count
+if fileDir!=None:
+	if parsedArgs.dir_match_count:
+		print(ofmt["dmcnt"].format(count=dirData[fileDir]["matches"]))
+	if parsedArgs.dir_file_count:
+		print(ofmt["dfcnt"].format(count=dirData[fileDir]["files"]))
+
+# --total-match-count, --total-file-count, and --total-dir-count
+if parsedArgs.total_match_count:
+	print(ofmt["tmcnt"].format(count=totalMatches))
+if parsedArgs.total_file_count:
+	print(ofmt["tfcnt"].format(count=totalFiles))
+if parsedArgs.total_dir_count:
+	print(ofmt["tdcnt"].format(count=len(dirData.keys())))
