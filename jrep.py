@@ -1,4 +1,4 @@
-import argparse, os, sys, re, glob, mmap, copy, itertools
+import argparse, os, sys, re, glob, mmap, copy, itertools, functools
 
 """
 	JREP
@@ -28,18 +28,18 @@ parser.add_argument("--full-name-anti-regex",       nargs="+", default=[], help=
 parser.add_argument("--file-regex"          ,       nargs="+", default=[], help="Regexes to test file contents for")
 parser.add_argument("--file-anti-regex"     ,       nargs="+", default=[], help="Like --file-regex but excludes files that match")
 
-parser.add_argument("--sort"                , "-S",                        help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse")
+parser.add_argument("--sort"                , "-S",                        help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available (todo: document)")
 parser.add_argument("--no-headers"          , "-H", action="store_true"  , help="Don't print match: or file: before lines")
 parser.add_argument("--print-directories"   , "-d", action="store_true"  , help="Print names of explored directories")
 parser.add_argument("--print-file-names"    , "-n", action="store_true"  , help="Print file names as well as matches")
 parser.add_argument("--print-full-paths"    , "-p", action="store_true"  , help="Print full file paths")
-parser.add_argument("--print-posix-paths"   , "-P", action="store_true"  , help="Print C:/stuff instead of C:\\stuff")
-parser.add_argument("--dont-print-matches"  , "-N", action="store_true"  , help="Don't print matches (use with -n to only print names)")
+parser.add_argument("--print-posix-paths"   , "-P", action="store_true"  , help="Print replace \\ with / in file paths")
+parser.add_argument("--dont-print-matches"  , "-N", action="store_true"  , help="Don't print matches (use with --print-file-names to only print names)")
 parser.add_argument("--print-match-offset"  , "-o", action="store_true"  , help="Print the match offset (ignores -H)")
 parser.add_argument("--print-match-range"   , "-O", action="store_true"  , help="Print the match range  (implies -o)")
 
 parser.add_argument("--replace"             , "-r", nargs="+", default=[], help="Regex replacement")
-parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after -r")
+parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after --replace is applied")
 parser.add_argument("--escape"              , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
 parser.add_argument("--file-match-limit"    , "--fml", type=int, default=0, help="Max matches per file")
@@ -55,9 +55,6 @@ parser.add_argument("--total-match-count"   , "--tmc", "-C", action="store_true"
 parser.add_argument("--dir-file-count"      , "--dfc",       action="store_true", help="Count files per directory")
 parser.add_argument("--total-file-count"    , "--tfc",       action="store_true", help="Count files overall")
 parser.add_argument("--total-dir-count"     , "--tdc",       action="store_true", help="Count dirs overall")
-
-#parser.add_argument("--count"               , "-c", action="store_true"  , help="Count matches per file")
-#parser.add_argument("--total-count"         , "-C", action="store_true"  , help="Total --count of all files")
 
 parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
 parsedArgs=parser.parse_args()
@@ -116,6 +113,30 @@ class JSObj:
 	def __setitem__(self, key, val):        self.obj[key]=val
 	def __delitem__(self, key):      del    self.obj[key]
 
+@functools.cache
+def _blockwiseSort(x, y):
+	xblocks=re.findall(r"\d+|[^\d]+", x)
+	yblocks=re.findall(r"\d+|[^\d]+", y)
+	for i in range(min(len(xblocks), len(yblocks))):
+		if xblocks[i].isdigit() and yblocks[i].isdigit():
+			# Compare the blocks as ints
+			if int(xblocks[i])!=int(yblocks[i]):
+				return int(xblocks[i])-int(yblocks[i]) # An output of -53245 is treated the same as -1
+		else:
+			# Compare the blocks as strings
+			if xblocks[i]!=yblocks[i]:
+				return (xblocks[i]>yblocks[i])-(xblocks[i]<yblocks[i])
+	return 0
+
+@functools.cmp_to_key
+def blockwiseSort(x, y):
+	xlist=x.replace("\\", "/").split("/")
+	ylist=y.replace("\\", "/").split("/")
+	for i in range(min(len(xlist), len(ylist))):
+		if _blockwiseSort(xlist[i], ylist[i])!=0:
+			return _blockwiseSort(xlist[i], ylist[i])
+	return (len(xlist)>len(ylist))-(len(xlist)<len(ylist))
+
 def sortFiles(files, key=None):
 	"""
 		Sorts files if --sort is present
@@ -126,11 +147,12 @@ def sortFiles(files, key=None):
 		return files
 
 	sorts={
-		"ctime": lambda x:float("inf") if x["name"]=="-" else os.stat(x["name"]).st_ctime,
-		"mtime": lambda x:float("inf") if x["name"]=="-" else os.stat(x["name"]).st_mtime,
-		"atime": lambda x:float("inf") if x["name"]=="-" else os.stat(x["name"]).st_atime,
-		"name" : lambda x:x["name"],
-		"size" : lambda x:len(x["data"])
+		"ctime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_ctime,
+		"mtime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_mtime,
+		"atime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_atime,
+		"name"     : lambda x:x["name"],
+		"blockwise": lambda x:blockwiseSort(x["name"]),
+		"size"     : lambda x:len(x["data"]) if x["stdin"] else os.path.getsize(x["name"])
 	}
 	for sort in list(sorts.keys()):
 		# Scopes suck
@@ -202,7 +224,7 @@ def getFiles():
 	if not os.isatty(sys.stdin.fileno()) and not parsedArgs.stdin_files and not parsedArgs.stdin_globs:
 		if parsedArgs.verbose:
 			print("Verbose: Processing STDIN")
-		yield {"name":"-", "data":sys.stdin.read().encode(errors="ignore"), "isDir": False}
+		yield {"name":"-", "data":sys.stdin.read().encode(errors="ignore"), "isDir": False, "stdin": True}
 
 	for file in _getFiles():
 		if parsedArgs.verbose:
@@ -213,7 +235,7 @@ def getFiles():
 				# Does the file content matter? No? Ignore it then
 				if parsedArgs.verbose:
 					print("Verbose: Optimizing away actually opening the file")
-				yield {"name": file, "data": b"", "isDir": False}
+				yield {"name": file, "data": b"", "isDir": False, "stdin": False}
 			else:
 				try:
 					with open(file) as f:
@@ -222,11 +244,11 @@ def getFiles():
 							mmapFile=mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
 						except ValueError:
 							mmapFile=b""
-						yield {"name": file, "data": mmapFile, "isDir": False}
+						yield {"name": file, "data": mmapFile, "isDir": False, "stdin": False}
 				except Exception as AAAAA:
 					print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\"", file=sys.stderr)
 		else:
-			yield {"name": file, "isDir": True}
+			yield {"name": file, "isDir": True, "stdin": False}
 
 def processFileName(fname):
 	if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
