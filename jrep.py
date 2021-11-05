@@ -198,27 +198,15 @@ def getFiles():
 		for pattern in parsedArgs.glob:
 			yield from glob.iglob(pattern, recursive=True)
 
-	def _processDir(dname):
-		"""
-			Print directory names if --print-directories is specified
-		"""
-		dname=processDirName(dname)
-		if parsedArgs.print_directories and dname not in exploredDirs:
-			print(ofmt["dname"].format(dname=dname))
-			exploredDirs.append(dname)
-
 	# Add stdin as a file
 	if not os.isatty(sys.stdin.fileno()) and not parsedArgs.stdin_files and not parsedArgs.stdin_globs:
 		if parsedArgs.verbose:
 			print("Verbose: Processing STDIN")
-		yield {"name":"-", "data":sys.stdin.read().encode(errors="ignore")}
+		yield {"name":"-", "data":sys.stdin.read().encode(errors="ignore"), "isDir": False}
 
-	exploredDirs=[]
 	for file in _getFiles():
 		if parsedArgs.verbose:
 			print(f"Verbose: Processing file \"{file}\"")
-
-		_processDir(file) # Handle --print-directories
 
 		if os.path.isfile(file):
 			if fileContentsDontMatter():
@@ -288,6 +276,17 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	if not file["isDir"]:
 		fileDir=os.path.dirname(fileDir)
 
+	# --dir-match-count and --dir-file-count
+	if lastDir!=None and lastDir!=fileDir:
+		if parsedArgs.dir_match_count:
+			print(ofmt["dmcnt"].format(count=dirData[lastDir]["matches"]))
+		if parsedArgs.dir_file_count:
+			print(ofmt["dfcnt"].format(count=dirData[lastDir]["files"]))
+
+	# --print-directories
+	if parsedArgs.print_directories and fileDir not in dirData:
+		print(ofmt["dname"].format(dname=processDirName(fileDir)))
+
 	# Keeps track of, well, directory data
 	if fileDir not in dirData:
 		if parsedArgs.verbose:
@@ -296,13 +295,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	if _TDL and len(dirData.keys())>_TDL:
 		break
-
-	# --dir-match-count and --dir-file-count
-	if lastDir!=None and lastDir!=fileDir:
-		if parsedArgs.dir_match_count:
-			print(ofmt["dmcnt"].format(count=dirData[lastDir]["matches"]))
-		if parsedArgs.dir_file_count:
-			print(ofmt["dfcnt"].format(count=dirData[lastDir]["files"]))
 
 	# Handle --file-limit
 	# Really slow on big directories
