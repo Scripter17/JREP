@@ -85,16 +85,16 @@ _mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 
 # Output fstrings to make later usage easier
 ofmt={
-	"dname": (("Directory: "        *_header)+        "{dname}") * parsedArgs.print_directories,
-	"fname": (("File: "             *_header)+        "{fname}") * parsedArgs.print_file_names,
-	"match": (("Match"              *_header)+_mRange+"{match}") * (not parsedArgs.dont_print_matches),
+	"dname": (("Directory: "        *_header)+"{dname}") * parsedArgs.print_directories,
+	"fname": (("File: "             *_header)+"{fname}") * parsedArgs.print_file_names,
+	"match": (("Match"              *_header)+ _mRange ) * (not parsedArgs.dont_print_matches),
 
-	"fmcnt": (("File match count: " *_header)+        "{count}") * parsedArgs.file_match_count,
-	"dmcnt": (("Dir match count: "  *_header)+        "{count}") * parsedArgs.dir_match_count,
-	"dfcnt": (("Dir file count: "   *_header)+        "{count}") * parsedArgs.dir_file_count,
-	"tmcnt": (("Total match count: "*_header)+        "{count}") * parsedArgs.total_match_count,
-	"tfcnt": (("Total file count: " *_header)+        "{count}") * parsedArgs.total_file_count,
-	"tdcnt": (("Total dir count: "  *_header)+        "{count}") * parsedArgs.total_dir_count,
+	"fmcnt": (("File match count: " *_header)+"{count}") * parsedArgs.file_match_count,
+	"dmcnt": (("Dir match count: "  *_header)+"{count}") * parsedArgs.dir_match_count,
+	"dfcnt": (("Dir file count: "   *_header)+"{count}") * parsedArgs.dir_file_count,
+	"tmcnt": (("Total match count: "*_header)+"{count}") * parsedArgs.total_match_count,
+	"tfcnt": (("Total file count: " *_header)+"{count}") * parsedArgs.total_file_count,
+	"tdcnt": (("Total dir count: "  *_header)+"{count}") * parsedArgs.total_dir_count,
 }
 
 class JSObj:
@@ -387,8 +387,9 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					})
 
 				# Print matches
-				if not parsedArgs.dont_print_matches and match[0].decode() not in matchedStrings:
-					print(ofmt["match"].format(range=match.span(), match=match[0].decode()))
+				if not parsedArgs.dont_print_matches and match[0] not in matchedStrings:
+					sys.stdout.buffer.write(ofmt["match"].format(range=match.span()).encode())
+					sys.stdout.buffer.write(match[0])
 
 				# Handle --no-duplicates
 				if parsedArgs.no_duplicates:
