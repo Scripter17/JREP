@@ -1,5 +1,4 @@
 # JREP
- James' GREP
 
 JREP is a work-in-process replacement/companion for the Linux command GREP designed to be cross-platform, feature rich, and very intuitive.
 
