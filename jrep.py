@@ -393,7 +393,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 				# Handle --no-duplicates
 				if parsedArgs.no_duplicates:
-					matchedStrings.append(match[0].decode())
+					matchedStrings.append(match[0])
 
 				# Handle --match-limit, --dir-match-limit, and --total-match-limit
 				if (_FML!=0 and matchIndex>=_FML) or\
