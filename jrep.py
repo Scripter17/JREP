@@ -57,6 +57,7 @@ parser.add_argument("--total-file-count"    , "--tfc",       action="store_true"
 parser.add_argument("--total-dir-count"     , "--tdc",       action="store_true", help="Count dirs overall")
 
 parser.add_argument("--print-whole-lines"       , action="store_true", help="Print whole lines like FINDSTR")
+parser.add_argument("--print-non-matching-files", action="store_true", help="Print file names with no matches")
 parser.add_argument("--no-warn"                 , action="store_true", help="Don't print warning messages")
 
 parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
@@ -423,8 +424,13 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			if parsedArgs.file_match_count and matchIndex:
 				print(ofmt["fmcnt"].format(count=matchIndex))
 
+
 		except Exception as AAAAA:
 			warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
+
+	if parsedArgs.print_non_matching_files and matchIndex==0:
+		print(ofmt["fname"].format(fname=file["name"]))
+
 	if _continue:
 		continue
 
