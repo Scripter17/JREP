@@ -92,16 +92,16 @@ _mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 
 # Output fstrings to make later usage easier
 ofmt={
-	"dname": ("Directory: "        *_header)+"{dname}",
-	"fname": ("File: "             *_header)+"{fname}",
-	"match": ("Regex {regexIndex}" *_header)+ _mRange ,
+	"dname": ("Directory: "          *_header)+"{dname}",
+	"fname": ("File: "               *_header)+"{fname}",
+	"match": ("Match (R{regexIndex})"*_header)+ _mRange ,
 
-	"fmcnt": ("File match count: " *_header)+"{count}",
-	"dmcnt": ("Dir match count: "  *_header)+"{count}",
-	"dfcnt": ("Dir file count: "   *_header)+"{count}",
-	"tmcnt": ("Total match count: "*_header)+"{count}",
-	"tfcnt": ("Total file count: " *_header)+"{count}",
-	"tdcnt": ("Total dir count: "  *_header)+"{count}",
+	"fmcnt": ("File match count (R{regexIndex}): " *_header)+"{count}",
+	"dmcnt": ("Dir match count (R{regexIndex}): "  *_header)+"{count}",
+	"dfcnt": ("Dir file count: "                   *_header)+"{count}",
+	"tmcnt": ("Total match count (R{regexIndex}): "*_header)+"{count}",
+	"tfcnt": ("Total file count: "                 *_header)+"{count}",
+	"tdcnt": ("Total dir count: "                  *_header)+"{count}",
 }
 
 class JSObj:
@@ -194,6 +194,7 @@ def fileContentsDontMatter():
 	       and not parsedArgs.file_regex       and not parsedArgs.file_anti_regex\
 	       and "fm" not in parsedArgs.limit    and "dm" not in parsedArgs.limit and "tm" not in parsedArgs.limit\
 	       and "fm" not in parsedArgs.count    and "dm" not in parsedArgs.count and "tm" not in parsedArgs.count
+
 def getFiles():
 	"""
 		Yields files selected with --file and --glob as {"file":filename, "data":mmapFile/bytes}
@@ -288,10 +289,12 @@ totalMatches=0
 totalFiles=0
 fileDir=None
 lastDir=None
-zipStuff=[]
+
+runData={"file":{}, "dir":{}, "total":{}}
+
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
 	verbose(f"Processing {file}")
-	zipStuff=[]
+	runData["file"]={"matches":[], "fmc":[]}
 	printedName=False
 
 	# Handle --name-regex, --full-name-regex, --name-anti-regex, and--full-name-anti-regex
@@ -323,7 +326,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	# Keeps track of, well, directory data
 	if fileDir not in dirData:
 		verbose(f"Adding {fileDir} to dirData")
-		dirData[fileDir]={"files":0, "matches":0}
+		dirData[fileDir]={"files":0, "matches":[]}
 
 	if _TDL and len(dirData.keys())>_TDL:
 		break
@@ -344,7 +347,9 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		verbose(f"Handling regex {regexIndex}: {regex}")
 
 		if parsedArgs.weave_matches:
-			zipStuff.append([])
+			runData["file"]["matches"].append([])
+		dirData[fileDir]["matches"].append(0)
+		runData["file"]["fmc"].append(0)
 
 		try:
 			# Handle --file-regex and --file-anti-regex
@@ -381,7 +386,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					totalFiles+=1
 
 				totalMatches+=1
-				dirData[fileDir]["matches"]+=1
+				dirData[fileDir]["matches"][-1]+=1
+				runData["file"]["fmc"][-1]+=1
 
 				# Quick optimization for when someone just wants filenames
 				if fileContentsDontMatter():
@@ -417,7 +423,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				# Print matches
 				if not parsedArgs.dont_print_matches and match[0] not in matchedStrings:
 					if parsedArgs.weave_matches:
-						zipStuff[-1].append(match)
+						runData["file"]["matches"][-1].append(match)
 					else:
 						printMatch(match, regexIndex)
 
@@ -431,10 +437,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				   (_TML!=0 and totalMatches>=_TML):
 					break
 
-			# Print match count (--count)
-			if "fm" in parsedArgs.count and matchIndex:
-				print(ofmt["fmcnt"].format(count=matchIndex))
-
 		except Exception as AAAAA:
 			warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
 
@@ -443,9 +445,14 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	if parsedArgs.weave_matches:
 		f=zip if parsedArgs.strict_weave else itertools.zip_longest
-		for matches in f(*zipStuff):
+		for matches in f(*runData["file"]["matches"]):
 			for regexIndex, match in enumerate(matches):
 				printMatch(match, regexIndex)
+
+	# Print match count (--count)
+	if "fm" in parsedArgs.count:
+		for regexIndex, count in enumerate(runData["file"]["fmc"]):
+			print(ofmt["fmcnt"].format(count=count, regexIndex=regexIndex))
 
 	if _continue:
 		continue
@@ -457,7 +464,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 # --dir-match-count and --dir-file count
 if fileDir!=None:
 	if "dm" in parsedArgs.count:
-		print(ofmt["dmcnt"].format(count=dirData[fileDir]["matches"]))
+		for regexIndex, count in enumerate(dirData[fileDir]["matches"]):
+			print(ofmt["dmcnt"].format(count=count, regexIndex=regexIndex))
 	if "df" in parsedArgs.count:
 		print(ofmt["dfcnt"].format(count=dirData[fileDir]["files"]))
 
