@@ -44,15 +44,15 @@ parser.add_argument("--escape"              , "-e", action="store_true"  , help=
 
 parser.add_argument("--file-match-limit"    , "--fml", type=int, default=0, help="Max matches per file")
 parser.add_argument("--dir-match-limit"     , "--dml", type=int, default=0, help="Max matches per directory")
-parser.add_argument("--total-match-limit"   , "--tml", type=int, default=0, help="Max matches overall")
 parser.add_argument("--dir-file-limit"      , "--dfl", type=int, default=0, help="Max files per directory")
+parser.add_argument("--total-match-limit"   , "--tml", type=int, default=0, help="Max matches overall")
 parser.add_argument("--total-file-limit"    , "--tfl", type=int, default=0, help="Max files overall")
 parser.add_argument("--total-dir-limit"     , "--tdl", type=int, default=0, help="Max dirs overall")
 
 parser.add_argument("--file-match-count"    , "--fmc", "-c", action="store_true", help="Count matches per file")
 parser.add_argument("--dir-match-count"     , "--dmc",       action="store_true", help="Count matches per directory")
-parser.add_argument("--total-match-count"   , "--tmc", "-C", action="store_true", help="Count matches overall")
 parser.add_argument("--dir-file-count"      , "--dfc",       action="store_true", help="Count files per directory")
+parser.add_argument("--total-match-count"   , "--tmc", "-C", action="store_true", help="Count matches overall")
 parser.add_argument("--total-file-count"    , "--tfc",       action="store_true", help="Count files overall")
 parser.add_argument("--total-dir-count"     , "--tdc",       action="store_true", help="Count dirs overall")
 
@@ -92,16 +92,16 @@ _mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 
 # Output fstrings to make later usage easier
 ofmt={
-	"dname": (("Directory: "        *_header)+"{dname}") * parsedArgs.print_directories,
-	"fname": (("File: "             *_header)+"{fname}") * parsedArgs.print_file_names,
-	"match": (("Match"              *_header)+ _mRange ) * (not parsedArgs.dont_print_matches),
+	"dname": (("Directory: "        *_header)+"{dname}"),
+	"fname": (("File: "             *_header)+"{fname}"),
+	"match": (("Match"              *_header)+ _mRange ),
 
-	"fmcnt": (("File match count: " *_header)+"{count}") * parsedArgs.file_match_count,
-	"dmcnt": (("Dir match count: "  *_header)+"{count}") * parsedArgs.dir_match_count,
-	"dfcnt": (("Dir file count: "   *_header)+"{count}") * parsedArgs.dir_file_count,
-	"tmcnt": (("Total match count: "*_header)+"{count}") * parsedArgs.total_match_count,
-	"tfcnt": (("Total file count: " *_header)+"{count}") * parsedArgs.total_file_count,
-	"tdcnt": (("Total dir count: "  *_header)+"{count}") * parsedArgs.total_dir_count,
+	"fmcnt": (("File match count: " *_header)+"{count}"),
+	"dmcnt": (("Dir match count: "  *_header)+"{count}"),
+	"dfcnt": (("Dir file count: "   *_header)+"{count}"),
+	"tmcnt": (("Total match count: "*_header)+"{count}"),
+	"tfcnt": (("Total file count: " *_header)+"{count}"),
+	"tdcnt": (("Total dir count: "  *_header)+"{count}"),
 }
 
 class JSObj:
@@ -407,6 +407,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				if not parsedArgs.dont_print_matches and match[0] not in matchedStrings:
 					sys.stdout.buffer.write(ofmt["match"].format(range=match.span()).encode())
 					sys.stdout.buffer.write(match[0])
+					sys.stdout.buffer.write(b"\n")
 
 				# Handle --no-duplicates
 				if parsedArgs.no_duplicates:
