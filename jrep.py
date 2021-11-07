@@ -1,4 +1,4 @@
-import argparse, os, sys, re, glob, mmap, copy, itertools, functools
+import argparse, os, sys, re, glob, mmap, copy, itertools, functools, itertools
 
 """
 	JREP
@@ -56,9 +56,11 @@ parser.add_argument("--total-match-count"   , "--tmc", "-C", action="store_true"
 parser.add_argument("--total-file-count"    , "--tfc",       action="store_true", help="Count files overall")
 parser.add_argument("--total-dir-count"     , "--tdc",       action="store_true", help="Count dirs overall")
 
-parser.add_argument("--print-whole-lines"       , action="store_true", help="Print whole lines like FINDSTR")
-parser.add_argument("--print-non-matching-files", action="store_true", help="Print file names with no matches")
-parser.add_argument("--no-warn"                 , action="store_true", help="Don't print warning messages")
+parser.add_argument("--print-whole-lines"         , action="store_true", help="Print whole lines like FINDSTR")
+parser.add_argument("--print-non-matching-files"  , action="store_true", help="Print file names with no matches")
+parser.add_argument("--no-warn"                   , action="store_true", help="Don't print warning messages")
+parser.add_argument("--weave-matches"       , "-w", action="store_true", help="Weave regex matchdes")
+parser.add_argument("--strict-weave"        , "-W", action="store_true", help="Only print full match sets")
 
 parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
 parsedArgs=parser.parse_args()
@@ -93,16 +95,16 @@ _mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 
 # Output fstrings to make later usage easier
 ofmt={
-	"dname": (("Directory: "        *_header)+"{dname}"),
-	"fname": (("File: "             *_header)+"{fname}"),
-	"match": (("Match"              *_header)+ _mRange ),
+	"dname": ("Directory: "        *_header)+"{dname}",
+	"fname": ("File: "             *_header)+"{fname}",
+	"match": ("Regex {regexIndex}" *_header)+ _mRange ,
 
-	"fmcnt": (("File match count: " *_header)+"{count}"),
-	"dmcnt": (("Dir match count: "  *_header)+"{count}"),
-	"dfcnt": (("Dir file count: "   *_header)+"{count}"),
-	"tmcnt": (("Total match count: "*_header)+"{count}"),
-	"tfcnt": (("Total file count: " *_header)+"{count}"),
-	"tdcnt": (("Total dir count: "  *_header)+"{count}"),
+	"fmcnt": ("File match count: " *_header)+"{count}",
+	"dmcnt": ("Dir match count: "  *_header)+"{count}",
+	"dfcnt": ("Dir file count: "   *_header)+"{count}",
+	"tmcnt": ("Total match count: "*_header)+"{count}",
+	"tfcnt": ("Total file count: " *_header)+"{count}",
+	"tdcnt": ("Total dir count: "  *_header)+"{count}",
 }
 
 class JSObj:
@@ -268,6 +270,13 @@ def processDirName(dname):
 	if parsedArgs.print_posix_paths: dname=dname.replace("\\", "/")
 	return dname
 
+def printMatch(match, regexIndex):
+	if match==None:
+		return
+	sys.stdout.buffer.write(ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
+	sys.stdout.buffer.write(match[0])
+	sys.stdout.buffer.write(b"\n")
+
 # Abbreviations to make my editor not show a horizontal scrollbar (my version of PEP8)
 _FML=parsedArgs.file_match_limit
 _DML=parsedArgs.dir_match_limit
@@ -283,8 +292,11 @@ totalMatches=0
 totalFiles=0
 fileDir=None
 lastDir=None
+zipStuff=[]
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
 	verbose(f"Processing {file}")
+	zipStuff=[]
+	printedName=False
 
 	# Handle --name-regex, --full-name-regex, --name-anti-regex, and--full-name-anti-regex
 	if not all(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_regex          )) or\
@@ -334,9 +346,11 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	matchIndex=0 # Just makes --XYZ-match-count stuff and --print-non-matching-files easier
 	for regexIndex, regex in enumerate(parsedArgs.regex):
 		verbose(f"Handling regex {regexIndex}: {regex}")
-		try:
-			printedName=False
 
+		if parsedArgs.weave_matches:
+			zipStuff.append([])
+
+		try:
 			# Handle --file-regex and --file-anti-regex
 			_fileRegexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
 			if any(map(_fileRegexCheck, parsedArgs.file_anti_regex)) or not all(map(_fileRegexCheck, parsedArgs.file_regex)):
@@ -406,9 +420,10 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 				# Print matches
 				if not parsedArgs.dont_print_matches and match[0] not in matchedStrings:
-					sys.stdout.buffer.write(ofmt["match"].format(range=match.span()).encode())
-					sys.stdout.buffer.write(match[0])
-					sys.stdout.buffer.write(b"\n")
+					if parsedArgs.weave_matches:
+						zipStuff[-1].append(match)
+					else:
+						printMatch(match, regexIndex)
 
 				# Handle --no-duplicates
 				if parsedArgs.no_duplicates:
@@ -429,7 +444,13 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
 
 	if parsedArgs.print_non_matching_files and matchIndex==0:
-		print(ofmt["fname"].format(fname=file["name"]))
+		print(ofmt["fname"].format(fname=processFileName(file["name"])))
+
+	if parsedArgs.weave_matches:
+		f=zip if parsedArgs.strict_weave else itertools.zip_longest
+		for matches in f(*zipStuff):
+			for regexIndex, match in enumerate(matches):
+				printMatch(match, regexIndex)
 
 	if _continue:
 		continue
