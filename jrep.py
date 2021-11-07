@@ -8,6 +8,14 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, itertools
 	(Can be treated as public domain if your project requires that)
 """
 
+class LimitAction(argparse.Action):
+	def __call__(self, parser, namespace, values, option_string):
+		# Very jank
+		ret={}
+		for value in values:
+			ret[value.split("=")[0]]=int(value.split("=")[1])
+		setattr(namespace, self.dest, ret)
+
 parser=argparse.ArgumentParser()
 
 parser.add_argument("regex"                 ,       nargs="*", default=[""], help="Regex(es) to process matches for")
@@ -42,19 +50,8 @@ parser.add_argument("--replace"             , "-r", nargs="+", default=[], help=
 parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after --replace is applied")
 parser.add_argument("--escape"              , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
-parser.add_argument("--file-match-limit"    , "--fml", type=int, default=0, help="Max matches per file")
-parser.add_argument("--dir-match-limit"     , "--dml", type=int, default=0, help="Max matches per directory")
-parser.add_argument("--dir-file-limit"      , "--dfl", type=int, default=0, help="Max files per directory")
-parser.add_argument("--total-match-limit"   , "--tml", type=int, default=0, help="Max matches overall")
-parser.add_argument("--total-file-limit"    , "--tfl", type=int, default=0, help="Max files overall")
-parser.add_argument("--total-dir-limit"     , "--tdl", type=int, default=0, help="Max dirs overall")
-
-parser.add_argument("--file-match-count"    , "--fmc", "-c", action="store_true", help="Count matches per file")
-parser.add_argument("--dir-match-count"     , "--dmc",       action="store_true", help="Count matches per directory")
-parser.add_argument("--dir-file-count"      , "--dfc",       action="store_true", help="Count files per directory")
-parser.add_argument("--total-match-count"   , "--tmc", "-C", action="store_true", help="Count matches overall")
-parser.add_argument("--total-file-count"    , "--tfc",       action="store_true", help="Count files overall")
-parser.add_argument("--total-dir-count"     , "--tdc",       action="store_true", help="Count dirs overall")
+parser.add_argument("--count"               , "-c", nargs="+", default=[],                     help="Count match/file/dir per file, dir, and/or total (Ex: --count fm df)")
+parser.add_argument("--limit"               , "-l", nargs="+", default=[], action=LimitAction, help="Count match/file/dir per file, dir, and/or total (Ex: --limit fm=1 td=5)")
 
 parser.add_argument("--print-whole-lines"         , action="store_true", help="Print whole lines like FINDSTR")
 parser.add_argument("--print-non-matching-files"  , action="store_true", help="Print file names with no matches")
@@ -193,11 +190,10 @@ def findAllSubs(pattern, replace, string):
 
 def fileContentsDontMatter():
 	return parsedArgs.dont_print_matches\
-	       and not any(parsedArgs.regex)       and not parsedArgs.file_match_limit\
-	       and not parsedArgs.dir_match_limit  and not parsedArgs.total_match_limit\
+	       and not any(parsedArgs.regex)\
 	       and not parsedArgs.file_regex       and not parsedArgs.file_anti_regex\
-	       and not parsedArgs.file_match_count and not parsedArgs.dir_match_count and not parsedArgs.total_match_count
-
+	       and "fm" not in parsedArgs.limit    and "dm" not in parsedArgs.limit and "tm" not in parsedArgs.limit\
+	       and "fm" not in parsedArgs.count    and "dm" not in parsedArgs.count and "tm" not in parsedArgs.count
 def getFiles():
 	"""
 		Yields files selected with --file and --glob as {"file":filename, "data":mmapFile/bytes}
@@ -278,12 +274,12 @@ def printMatch(match, regexIndex):
 	sys.stdout.buffer.write(b"\n")
 
 # Abbreviations to make my editor not show a horizontal scrollbar (my version of PEP8)
-_FML=parsedArgs.file_match_limit
-_DML=parsedArgs.dir_match_limit
-_TML=parsedArgs.total_match_limit
-_DFL=parsedArgs.dir_file_limit
-_TFL=parsedArgs.total_file_limit
-_TDL=parsedArgs.total_dir_limit
+_FML=parsedArgs.limit["fm"] if "fm" in parsedArgs.limit else 0
+_DML=parsedArgs.limit["dm"] if "dm" in parsedArgs.limit else 0
+_TML=parsedArgs.limit["tm"] if "tm" in parsedArgs.limit else 0
+_DFL=parsedArgs.limit["df"] if "df" in parsedArgs.limit else 0
+_TFL=parsedArgs.limit["tf"] if "tf" in parsedArgs.limit else 0
+_TDL=parsedArgs.limit["td"] if "td" in parsedArgs.limit else 0
 
 # Tracking stuffs
 matchedStrings=[] # --no-duplicates handler
@@ -315,9 +311,9 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# --dir-match-count and --dir-file-count
 	if lastDir!=None and lastDir!=fileDir:
-		if parsedArgs.dir_match_count:
+		if "dm" in parsedArgs.count:
 			print(ofmt["dmcnt"].format(count=dirData[lastDir]["matches"]))
-		if parsedArgs.dir_file_count:
+		if "fc" in parsedArgs.count:
 			print(ofmt["dfcnt"].format(count=dirData[lastDir]["files"]))
 
 	# --print-directories
@@ -436,9 +432,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					break
 
 			# Print match count (--count)
-			if parsedArgs.file_match_count and matchIndex:
+			if "fm" in parsedArgs.count and matchIndex:
 				print(ofmt["fmcnt"].format(count=matchIndex))
-
 
 		except Exception as AAAAA:
 			warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
@@ -461,15 +456,15 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 # --dir-match-count and --dir-file count
 if fileDir!=None:
-	if parsedArgs.dir_match_count:
+	if "dm" in parsedArgs.count:
 		print(ofmt["dmcnt"].format(count=dirData[fileDir]["matches"]))
-	if parsedArgs.dir_file_count:
+	if "df" in parsedArgs.count:
 		print(ofmt["dfcnt"].format(count=dirData[fileDir]["files"]))
 
 # --total-match-count, --total-file-count, and --total-dir-count
-if parsedArgs.total_match_count:
+if "tm" in parsedArgs.count:
 	print(ofmt["tmcnt"].format(count=totalMatches))
-if parsedArgs.total_file_count:
+if "tf" in parsedArgs.count:
 	print(ofmt["tfcnt"].format(count=totalFiles))
-if parsedArgs.total_dir_count:
+if "td" in parsedArgs.count:
 	print(ofmt["tdcnt"].format(count=len(dirData.keys())))
