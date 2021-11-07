@@ -329,6 +329,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# Main matching stuff
 	_continue=False # PEP-3136 would've come in clutch here
+	matchIndex=0 # Just makes --XYZ-match-count stuff and --print-non-matching-files easier
 	for regexIndex, regex in enumerate(parsedArgs.regex):
 		if parsedArgs.verbose:
 			print(f"Verbose: handling regex {regexIndex}: {regex}")
@@ -359,7 +360,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				matches=re.finditer(regex, file["data"])
 
 			# Process matches
-			matchIndex=0 # Just makes --file-match-count stuff easier
+			matchIndex=0
 			for matchIndex, match in enumerate(matches, start=1):
 				# Print file name
 				if not printedName:
@@ -377,13 +378,30 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 						print("Verbose: Optimizing away actually reading the file")
 					break
 
+				# Makes further pseudo-re.match shenanigans easier
+				match=JSObj({
+					0     : match[0],
+					"span": match.span
+				})
+
 				# Handle --sub
 				# TYSM mCoding for explaining how zip works
 				# (zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
 				for pair in zip(parsedArgs.sub[0::2], parsedArgs.sub[1::2]):
 					match=JSObj({
-						0     : re.sub(pair[0].encode(), pair[1].encode(), match[0]),
-						"span": match.span
+						**match,
+						0: re.sub(pair[0].encode(), pair[1].encode(), match[0])
+					})
+
+				# --print-whole-lines
+				if parsedArgs.print_whole_lines:
+					lineStart=file["data"].rfind(b"\n", 0, match.span()[1])
+					lineEnd  =file["data"]. find(b"\n",    match.span()[1])
+					if lineStart==-1: lineStart=None
+					if lineEnd  ==-1: lineEnd  =None
+					match=JSObj({
+						**match,
+						0: file["data"][lineStart:lineEnd]
 					})
 
 				# Print matches
