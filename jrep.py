@@ -56,12 +56,21 @@ parser.add_argument("--dir-file-count"      , "--dfc",       action="store_true"
 parser.add_argument("--total-file-count"    , "--tfc",       action="store_true", help="Count files overall")
 parser.add_argument("--total-dir-count"     , "--tdc",       action="store_true", help="Count dirs overall")
 
+parser.add_argument("--print-whole-lines"       , action="store_true", help="Print whole lines like FINDSTR")
+parser.add_argument("--no-warn"                 , action="store_true", help="Don't print warning messages")
+
 parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
 parsedArgs=parser.parse_args()
 
-if parsedArgs.verbose:
-	print("Verbose: JREP preview version")
-	print(parsedArgs)
+def verbose(x):
+	if parsedArgs.verbose:
+		print(f"Verbose: {x}")
+def warn(x):
+	if not parsedArgs.no_warn:
+		print(f"{x}", file=sys.stderr)
+
+verbose("JREP preview version")
+verbose(parsedArgs)
 
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
 	print("Error: Length of --replace must be either 1 or equal to the number of regexes", file=sys.stderr)
@@ -69,11 +78,9 @@ if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedAr
 
 # Simple implementation of --escape
 if parsedArgs.escape:
-	if parsedArgs.verbose:
-		print("Verbose: Added --escape args to --sub")
+	verbose("Added --escape args to --sub")
 	parsedArgs.sub.extend(["\\", "\\\\", "\r", "\\r", "\n", "\\n"])
-	if parsedArgs.verbose:
-		print("Verbose: --sub is now", parsedArgs.sub)
+	verbose("--sub is now", parsedArgs.sub)
 
 # Dumb output fstring generation stuff
 _header=not parsedArgs.no_headers
@@ -112,6 +119,8 @@ class JSObj:
 	def __getitem__(self, key):      return self.obj[key]
 	def __setitem__(self, key, val):        self.obj[key]=val
 	def __delitem__(self, key):      del    self.obj[key]
+
+	def keys(self): return self.obj.keys()
 
 @functools.cache
 def _blockwiseSort(x, y):
@@ -201,8 +210,7 @@ def getFiles():
 		"""
 		
 		# Files
-		if parsedArgs.verbose:
-			print("Verbose: Yielding files")
+		verbose("Yielding files")
 		# --stdin-files
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_files:
 			yield from sys.stdin.read().splitlines()
@@ -210,8 +218,7 @@ def getFiles():
 		yield from parsedArgs.file
 		
 		# Globs
-		if parsedArgs.verbose:
-			print("Verbose: Yielding globs") # r/PythonOOC
+		verbose("Yielding globs") # r/PythonOOC
 		# --stdin-globs
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_globs:
 			for pattern in sys.stdin.read().splitlines():
@@ -222,19 +229,16 @@ def getFiles():
 
 	# Add stdin as a file
 	if not os.isatty(sys.stdin.fileno()) and not parsedArgs.stdin_files and not parsedArgs.stdin_globs:
-		if parsedArgs.verbose:
-			print("Verbose: Processing STDIN")
+		verbose("Processing STDIN")
 		yield {"name":"-", "data":sys.stdin.read().encode(errors="ignore"), "isDir": False, "stdin": True}
 
 	for file in _getFiles():
-		if parsedArgs.verbose:
-			print(f"Verbose: Processing file \"{file}\"")
+		verbose(f"Processing file \"{file}\"")
 
 		if os.path.isfile(file):
 			if fileContentsDontMatter():
 				# Does the file content matter? No? Ignore it then
-				if parsedArgs.verbose:
-					print("Verbose: Optimizing away actually opening the file")
+				verbose("Optimizing away actually opening the file")
 				yield {"name": file, "data": b"", "isDir": False, "stdin": False}
 			else:
 				try:
@@ -246,7 +250,7 @@ def getFiles():
 							mmapFile=b""
 						yield {"name": file, "data": mmapFile, "isDir": False, "stdin": False}
 				except Exception as AAAAA:
-					print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\"", file=sys.stderr)
+					warn(f"Cannot process \"{file}\" because of \"{AAAAA}\"")
 		else:
 			yield {"name": file, "isDir": True, "stdin": False}
 
@@ -279,8 +283,7 @@ totalFiles=0
 fileDir=None
 lastDir=None
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
-	if parsedArgs.verbose:
-		print(f"Verbose: Processing {file}")
+	verbose(f"Processing {file}")
 
 	# Handle --name-regex, --full-name-regex, --name-anti-regex, and--full-name-anti-regex
 	if not all(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_regex          )) or\
@@ -288,8 +291,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	       any(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_anti_regex     )) or\
 	       any(map(lambda x:re.search(x, os.path.realpath(file["name"])), parsedArgs.full_name_anti_regex)):
 		# Really should make how this works configurable
-		if parsedArgs.verbose:
-			print(f"Verbose: File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
+		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
 		continue
 
 	# --file-limit, --dir-match-limit, --dir-file-count, and --dir-match-count
@@ -311,8 +313,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# Keeps track of, well, directory data
 	if fileDir not in dirData:
-		if parsedArgs.verbose:
-			print(f"Verbose: Adding {fileDir} to dirData")
+		verbose(f"Adding {fileDir} to dirData")
 		dirData[fileDir]={"files":0, "matches":0}
 
 	if _TDL and len(dirData.keys())>_TDL:
@@ -331,8 +332,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	_continue=False # PEP-3136 would've come in clutch here
 	matchIndex=0 # Just makes --XYZ-match-count stuff and --print-non-matching-files easier
 	for regexIndex, regex in enumerate(parsedArgs.regex):
-		if parsedArgs.verbose:
-			print(f"Verbose: handling regex {regexIndex}: {regex}")
+		verbose(f"Handling regex {regexIndex}: {regex}")
 		try:
 			printedName=False
 
@@ -374,8 +374,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 				# Quick optimization for when someone just wants filenames
 				if fileContentsDontMatter():
-					if parsedArgs.verbose:
-						print("Verbose: Optimizing away actually reading the file")
+					verbose("Optimizing away actually reading the file")
 					break
 
 				# Makes further pseudo-re.match shenanigans easier
@@ -424,7 +423,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				print(ofmt["fmcnt"].format(count=matchIndex))
 
 		except Exception as AAAAA:
-			print(f"Warning: Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}", file=sys.stderr)
+			warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
 	if _continue:
 		continue
 
