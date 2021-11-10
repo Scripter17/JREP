@@ -8,6 +8,21 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, itertools
 	(Can be treated as public domain if your project requires that)
 """
 
+# Make glob.glob only enter subdirectories after all files in a directory have been processed
+def _rlistdir(dirname, dir_fd, dironly):
+	names = glob._listdir(dirname, dir_fd, dironly)
+	directories=[]
+	for x in names:
+		if not glob._ishidden(x):
+			yield x
+			path = glob._join(dirname, x) if dirname else x
+			if os.path.isdir(path):
+				directories.append(path)
+	for directory in directories:
+		for y in _rlistdir(directory, dir_fd, dironly):
+			yield glob._join(directory, y)
+glob._rlistdir=_rlistdir
+
 class LimitAction(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string):
 		# Very jank
@@ -319,17 +334,17 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		if "fc" in parsedArgs.count:
 			print(ofmt["dfcnt"].format(count=dirData[lastDir]["files"]))
 
+	if _TDL and len(dirData.keys())>=_TDL:
+		continue
+
 	# --print-directories
-	if parsedArgs.print_directories and fileDir not in dirData:
+	if parsedArgs.print_directories and fileDir!=lastDir:
 		print(ofmt["dname"].format(dname=processDirName(fileDir)))
 
 	# Keeps track of, well, directory data
 	if fileDir not in dirData:
 		verbose(f"Adding {fileDir} to dirData")
 		dirData[fileDir]={"files":0, "matches":[]}
-
-	if _TDL and len(dirData.keys())>_TDL:
-		break
 
 	# Handle --file-limit
 	# Really slow on big directories
