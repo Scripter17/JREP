@@ -19,15 +19,10 @@ usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
                [--print-file-names] [--print-full-paths] [--print-posix-paths]
                [--dont-print-matches] [--print-match-offset]
                [--print-match-range] [--replace REPLACE [REPLACE ...]]
-               [--sub SUB [SUB ...]] [--escape]
-               [--file-match-limit FILE_MATCH_LIMIT]
-               [--dir-match-limit DIR_MATCH_LIMIT]
-               [--total-match-limit TOTAL_MATCH_LIMIT]
-               [--dir-file-limit DIR_FILE_LIMIT]
-               [--total-file-limit TOTAL_FILE_LIMIT]
-               [--total-dir-limit TOTAL_DIR_LIMIT] [--file-match-count]
-               [--dir-match-count] [--total-match-count] [--dir-file-count]
-               [--total-file-count] [--total-dir-count] [--verbose]
+               [--sub SUB [SUB ...]] [--escape] [--count COUNT [COUNT ...]]
+               [--limit LIMIT [LIMIT ...]] [--depth-first]
+               [--print-whole-lines] [--print-non-matching-files] [--no-warn]
+               [--weave-matches] [--strict-weave] [--verbose]
                [regex ...]
 
 positional arguments:
@@ -81,30 +76,19 @@ options:
                         re.sub argument pairs after --replace is applied
   --escape, -e          Replace \, carriage returns, and newlines with \\, \r,
                         and \n
-  --file-match-limit FILE_MATCH_LIMIT, --fml FILE_MATCH_LIMIT
-                        Max matches per file
-  --dir-match-limit DIR_MATCH_LIMIT, --dml DIR_MATCH_LIMIT
-                        Max matches per directory
-  --total-match-limit TOTAL_MATCH_LIMIT, --tml TOTAL_MATCH_LIMIT
-                        Max matches overall
-  --dir-file-limit DIR_FILE_LIMIT, --dfl DIR_FILE_LIMIT
-                        Max files per directory
-  --total-file-limit TOTAL_FILE_LIMIT, --tfl TOTAL_FILE_LIMIT
-                        Max files overall
-  --total-dir-limit TOTAL_DIR_LIMIT, --tdl TOTAL_DIR_LIMIT
-                        Max dirs overall
-  --file-match-count, --fmc, -c
-                        Count matches per file
-  --dir-match-count, --dmc
-                        Count matches per directory
-  --total-match-count, --tmc, -C
-                        Count matches overall
-  --dir-file-count, --dfc
-                        Count files per directory
-  --total-file-count, --tfc
-                        Count files overall
-  --total-dir-count, --tdc
-                        Count dirs overall
+  --count COUNT [COUNT ...], -c COUNT [COUNT ...]
+                        Count match/file/dir per file, dir, and/or total (Ex:
+                        --count fm df)
+  --limit LIMIT [LIMIT ...], -l LIMIT [LIMIT ...]
+                        Count match/file/dir per file, dir, and/or total (Ex:
+                        --limit fm=1 td=5)
+  --depth-first         Enter subdirectories before processing files
+  --print-whole-lines   Print whole lines like FINDSTR
+  --print-non-matching-files
+                        Print file names with no matches
+  --no-warn             Don't print warning messages
+  --weave-matches, -w   Weave regex matchdes
+  --strict-weave, -W    Only print full match sets
   --verbose, -v         Verbose info
 ```
 
