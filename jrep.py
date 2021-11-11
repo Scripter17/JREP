@@ -8,36 +8,27 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, itertools
 	(Can be treated as public domain if your project requires that)
 """
 
-# Make glob.glob only enter subdirectories after all files in a directory have been processed
-def _rlistdir(dirname, dir_fd, dironly):
-	names = glob._listdir(dirname, dir_fd, dironly)
-	directories=[]
-	for x in names:
-		if not glob._ishidden(x):
-			yield x
-			path = glob._join(dirname, x) if dirname else x
-			if os.path.isdir(path):
-				directories.append(path)
-	for directory in directories:
-		for y in _rlistdir(directory, dir_fd, dironly):
-			yield glob._join(directory, y)
-glob._rlistdir=_rlistdir
+def parseLCName(name):
+	m=re.match(r"(?i)(?:(f)(?:ile)?|(d)(?:ir)?|(t)(?:otal)?)[-_]?(?:(m)(?:atch)?|(f)(?:ile)?|(d)(?:ir)?)", name)
+	return m and "".join(filter(lambda x:x, m.groups())).lower()
 
 class LimitAction(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string):
 		# Very jank
 		ret={}
-		for value in values:
-			ret[value.split("=")[0]]=int(value.split("=")[1])
+		for name, value in map(lambda x:x.split("="), values):
+			ret[parseLCName(name)]=int(value)
 		setattr(namespace, self.dest, ret)
 
 class CountAction(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string):
 		for value in values:
-			if   value=="all"  : values.extend(["total", "dir", "file"])
-			elif value=="total": values.extend(["tm",    "tf",  "td"])
-			elif value=="dir"  : values.extend(["dm",    "df"])
-			elif value=="file" : values.extend(["fm"])
+			value=parseLCName(value) or value
+			if   value=="all"       : values.extend(["total", "dir", "file"])
+			elif value=="total"     : values.extend(["tm",    "tf",  "td"])
+			elif value=="dir"       : values.extend(["dm",    "df"])
+			elif value=="file"      : values.extend(["fm"])
+			elif value not in values: values.append(value)
 		setattr(namespace, self.dest, values)
 
 parser=argparse.ArgumentParser()
@@ -77,6 +68,8 @@ parser.add_argument("--escape"              , "-e", action="store_true"  , help=
 parser.add_argument("--count"               , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm df)")
 parser.add_argument("--limit"               , "-l", nargs="+", default=[], action=LimitAction, help="Count match/file/dir per file, dir, and/or total (Ex: --limit fm=1 td=5)")
 
+parser.add_argument("--depth-first"         ,       action="store_true"  , help="Enter subdirectories before processing files")
+
 parser.add_argument("--print-whole-lines"         , action="store_true", help="Print whole lines like FINDSTR")
 parser.add_argument("--print-non-matching-files"  , action="store_true", help="Print file names with no matches")
 parser.add_argument("--no-warn"                   , action="store_true", help="Don't print warning messages")
@@ -95,6 +88,43 @@ def warn(x):
 
 verbose("JREP preview version")
 verbose(parsedArgs)
+
+def _rlistdirBreadthFirst(dirname, dir_fd, dironly):
+	"""
+		Make glob.glob only enter subdirectories after all files in a directory have been processed
+		Copied directly from the glob module with a few tweaks
+		Not sure on the copytight of that
+	"""
+	names = glob._listdir(dirname, dir_fd, dironly)
+	directories=[]
+	for x in names:
+		if not glob._ishidden(x):
+			yield x
+			path = glob._join(dirname, x) if dirname else x
+			if os.path.isdir(path):
+				directories.append(path)
+	for directory in directories:
+		for y in _rlistdirBreadthFirst(directory, dir_fd, dironly):
+			yield glob._join(directory, y)
+
+def _rlistdirDepthFirst(dirname, dir_fd, dironly):
+	names = glob._listdir(dirname, dir_fd, dironly)
+	files=[]
+	for x in names:
+		if not glob._ishidden(x):
+			if os.path.isfile(x):
+				files.append(x)
+			else:
+				yield x
+			path = glob._join(dirname, x) if dirname else x
+			for y in _rlistdirDepthFirst(path, dir_fd, dironly):
+				yield glob._join(x, y)
+	yield from files
+
+if parsedArgs.depth_first:
+	glob._rlistdir=_rlistdirDepthFirst
+else:
+	glob._rlistdir=_rlistdirBreadthFirst
 
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
 	print("Error: Length of --replace must be either 1 or equal to the number of regexes", file=sys.stderr)
@@ -330,7 +360,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		continue
 
 	# --file-limit, --dir-match-limit, --dir-file-count, and --dir-match-count
-	if os.path.isdir(file["name"]):
+	if file["isDir"]:
 		continue
 	lastDir=fileDir
 	fileDir=os.path.dirname(file["name"])
@@ -384,7 +414,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			# Turn regex into bytes
 			regex=regex.encode(errors="ignore")
 
-			# Probably a bad idea
+			# Probably a bad idea, performance wise
 			if parsedArgs.string:
 				regex=re.escape(regex)
 
