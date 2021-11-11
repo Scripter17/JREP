@@ -31,6 +31,15 @@ class LimitAction(argparse.Action):
 			ret[value.split("=")[0]]=int(value.split("=")[1])
 		setattr(namespace, self.dest, ret)
 
+class CountAction(argparse.Action):
+	def __call__(self, parser, namespace, values, option_string):
+		for value in values:
+			if   value=="all"  : values.extend(["total", "dir", "file"])
+			elif value=="total": values.extend(["tm",    "tf",  "td"])
+			elif value=="dir"  : values.extend(["dm",    "df"])
+			elif value=="file" : values.extend(["fm"])
+		setattr(namespace, self.dest, values)
+
 parser=argparse.ArgumentParser()
 
 parser.add_argument("regex"                 ,       nargs="*", default=[""], help="Regex(es) to process matches for")
@@ -65,7 +74,7 @@ parser.add_argument("--replace"             , "-r", nargs="+", default=[], help=
 parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after --replace is applied")
 parser.add_argument("--escape"              , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
-parser.add_argument("--count"               , "-c", nargs="+", default=[],                     help="Count match/file/dir per file, dir, and/or total (Ex: --count fm df)")
+parser.add_argument("--count"               , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm df)")
 parser.add_argument("--limit"               , "-l", nargs="+", default=[], action=LimitAction, help="Count match/file/dir per file, dir, and/or total (Ex: --limit fm=1 td=5)")
 
 parser.add_argument("--print-whole-lines"         , action="store_true", help="Print whole lines like FINDSTR")
@@ -299,13 +308,12 @@ _TDL=parsedArgs.limit["td"] if "td" in parsedArgs.limit else 0
 
 # Tracking stuffs
 matchedStrings=[] # --no-duplicates handler
-dirData={} # --file-limit and --dir-match-limit
 totalMatches=0
 totalFiles=0
 fileDir=None
 lastDir=None
 
-runData={"file":{}, "dir":{}, "total":{}}
+runData={"file":{}, "dir":{"files":0, "matches":[]}, "total":{"dirs":0}}
 
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
 	verbose(f"Processing {file}")
@@ -322,35 +330,35 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		continue
 
 	# --file-limit, --dir-match-limit, --dir-file-count, and --dir-match-count
+	if os.path.isdir(file["name"]):
+		continue
 	lastDir=fileDir
-	fileDir=file["name"]
-	if not file["isDir"]:
-		fileDir=os.path.dirname(fileDir)
+	fileDir=os.path.dirname(file["name"])
 
 	# --dir-match-count and --dir-file-count
 	if lastDir!=None and lastDir!=fileDir:
 		if "dm" in parsedArgs.count:
-			print(ofmt["dmcnt"].format(count=dirData[lastDir]["matches"]))
-		if "fc" in parsedArgs.count:
-			print(ofmt["dfcnt"].format(count=dirData[lastDir]["files"]))
+			print(ofmt["dmcnt"].format(count=runData["dir"]["matches"]))
+		if "df" in parsedArgs.count:
+			print(ofmt["dfcnt"].format(count=runData["dir"]["files"]))
 
-	if _TDL and len(dirData.keys())>=_TDL:
+	if _TDL and len(runData["dir"].keys())>=_TDL:
 		continue
 
 	# --print-directories
 	if parsedArgs.print_directories and fileDir!=lastDir:
+		runData["total"]["dirs"]+=1
 		print(ofmt["dname"].format(dname=processDirName(fileDir)))
 
 	# Keeps track of, well, directory data
-	if fileDir not in dirData:
-		verbose(f"Adding {fileDir} to dirData")
-		dirData[fileDir]={"files":0, "matches":[]}
+	if fileDir!=lastDir:
+		runData["dir"]={"files":0, "matches":[]}
 
 	# Handle --file-limit
 	# Really slow on big directories
-	if (_DFL!=0 and dirData[fileDir]["files"]==_DFL) or (_DML!=0 and dirData[fileDir]["matches"]>=_DML):
+	if (_DFL!=0 and runData["dir"]["files"]==_DFL) or (_DML!=0 and runData["dir"]["matches"]>=_DML):
 		continue
-	dirData[fileDir]["files"]+=1
+	runData["dir"]["files"]+=1
 
 	if file["isDir"]:
 		continue
@@ -363,7 +371,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 		if parsedArgs.weave_matches:
 			runData["file"]["matches"].append([])
-		dirData[fileDir]["matches"].append(0)
+		runData["dir"]["matches"].append(0)
 		runData["file"]["fmc"].append(0)
 
 		try:
@@ -401,7 +409,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					totalFiles+=1
 
 				totalMatches+=1
-				dirData[fileDir]["matches"][-1]+=1
+				runData["dir"]["matches"][-1]+=1
 				runData["file"]["fmc"][-1]+=1
 
 				# Quick optimization for when someone just wants filenames
@@ -448,7 +456,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 				# Handle --match-limit, --dir-match-limit, and --total-match-limit
 				if (_FML!=0 and matchIndex>=_FML) or\
-				   (_DML!=0 and dirData[fileDir]["matches"]>=_DML) or\
+				   (_DML!=0 and runData["dir"]["matches"]>=_DML) or\
 				   (_TML!=0 and totalMatches>=_TML):
 					break
 
@@ -479,10 +487,10 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 # --dir-match-count and --dir-file count
 if fileDir!=None:
 	if "dm" in parsedArgs.count:
-		for regexIndex, count in enumerate(dirData[fileDir]["matches"]):
+		for regexIndex, count in enumerate(runData["dir"]["matches"]):
 			print(ofmt["dmcnt"].format(count=count, regexIndex=regexIndex))
 	if "df" in parsedArgs.count:
-		print(ofmt["dfcnt"].format(count=dirData[fileDir]["files"]))
+		print(ofmt["dfcnt"].format(count=runData["dir"]["files"]))
 
 # --total-match-count, --total-file-count, and --total-dir-count
 if "tm" in parsedArgs.count:
@@ -490,4 +498,4 @@ if "tm" in parsedArgs.count:
 if "tf" in parsedArgs.count:
 	print(ofmt["tfcnt"].format(count=totalFiles))
 if "td" in parsedArgs.count:
-	print(ofmt["tdcnt"].format(count=len(dirData.keys())))
+	print(ofmt["tdcnt"].format(count=runData["total"]["dirs"]))
