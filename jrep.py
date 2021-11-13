@@ -9,7 +9,15 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, itertools
 """
 
 def parseLCName(name):
-	m=re.match(r"(?i)(?:(f)(?:ile)?|(d)(?:ir)?|(t)(?:otal)?)[-_]?(?:(m)(?:atch)?|(f)(?:ile)?|(d)(?:ir)?)", name)
+	def genOpts(*opts):
+		# opts=["file", "files", "dir", ...]
+		return "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
+	#r=r"(?i)(?:(f)(?:iles?)?|(d)(?:irs?)?|(t)(?:otals?)?)[-_]?(?:(m)(?:atch(?:e?s)?)?|(f)(?:iles?)?|(d)(?:irs?)?)(?:[-_]?(?:(f)(?:ailure)?))?(?:[-_]?(?:(p)(?:ercent)?))?"
+	r=genOpts(r"file"         , r"dir"            , r"total")    +r"[-_]?"+\
+	  genOpts(r"match(?:e?s)?", r"files?"         , r"dirs?")    +r"[-_]?"+\
+	  genOpts(r"failures?"    , r"pass(?:e?[sd])?"          )+"?"+r"[-_]?"+\
+	  genOpts(r"percents?")                         +"?"
+	m=re.match(r, name)
 	return m and "".join(filter(lambda x:x, m.groups())).lower()
 
 class LimitAction(argparse.Action):
@@ -44,10 +52,13 @@ _stdin=parser.add_mutually_exclusive_group()
 _stdin.add_argument("--stdin-files"         , "-F", action="store_true"  , help="Treat STDIN as a list of files")
 _stdin.add_argument("--stdin-globs"         , "-G", action="store_true"  , help="Treat STDIN as a list of globs")
 
-parser.add_argument("--name-regex"          , "-t", nargs="+", default=[], help="Regex to test relative file names for")
-parser.add_argument("--full-name-regex"     , "-T", nargs="+", default=[], help="Regex to test absolute file names for")
-parser.add_argument("--name-anti-regex"     ,       nargs="+", default=[], help="Like --name-regex      but excludes file names that match")
-parser.add_argument("--full-name-anti-regex",       nargs="+", default=[], help="Like --full-name-regex but excludes file names that match")
+parser.add_argument("--name-regex"            , "-t", nargs="+", default=[], help="Regex to test relative file names for")
+parser.add_argument("--full-name-regex"       , "-T", nargs="+", default=[], help="Regex to test absolute file names for")
+parser.add_argument("--name-anti-regex"       ,       nargs="+", default=[], help="Like --name-regex      but excludes file names that match")
+parser.add_argument("--full-name-anti-regex"  ,       nargs="+", default=[], help="Like --full-name-regex but excludes file names that match")
+parser.add_argument("--name-ignore-regex"     ,       nargs="+", default=[], help="Like --name-anti-regex      but doesn't contribute to --count dir-failed-files")
+parser.add_argument("--full-name-ignore-regex",       nargs="+", default=[], help="Like --full-name-anti-regex but doesn't contribute to --count dir-failed-files")
+
 parser.add_argument("--file-regex"          ,       nargs="+", default=[], help="Regexes to test file contents for")
 parser.add_argument("--file-anti-regex"     ,       nargs="+", default=[], help="Like --file-regex but excludes files that match")
 
@@ -65,8 +76,8 @@ parser.add_argument("--replace"             , "-r", nargs="+", default=[], help=
 parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after --replace is applied")
 parser.add_argument("--escape"              , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
-parser.add_argument("--count"               , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm df)")
-parser.add_argument("--limit"               , "-l", nargs="+", default=[], action=LimitAction, help="Count match/file/dir per file, dir, and/or total (Ex: --limit fm=1 td=5)")
+parser.add_argument("--count"               , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
+parser.add_argument("--limit"               , "-l", nargs="+", default={}, action=LimitAction, help="Count match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
 
 parser.add_argument("--depth-first"         ,       action="store_true"  , help="Enter subdirectories before processing files")
 
@@ -132,9 +143,8 @@ if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedAr
 
 # Simple implementation of --escape
 if parsedArgs.escape:
-	verbose("Added --escape args to --sub")
 	parsedArgs.sub.extend(["\\", "\\\\", "\r", "\\r", "\n", "\\n"])
-	verbose("--sub is now", parsedArgs.sub)
+	verbose("Added --escape args to --sub; --sub is now", parsedArgs.sub)
 
 # Dumb output fstring generation stuff
 _header=not parsedArgs.no_headers
@@ -156,6 +166,12 @@ ofmt={
 	"tmcnt": ("Total match count (R{regexIndex}): "*_header)+"{count}",
 	"tfcnt": ("Total file count: "                 *_header)+"{count}",
 	"tdcnt": ("Total dir count: "                  *_header)+"{count}",
+
+	"dffcnt" : ("Dir failed file count: "          *_header)+"{count}",
+	"dffpcnt": ("Dir failed file percentage: "     *_header)+"{percent}",
+
+	"dfpcnt" : ("Dir passed file count: "          *_header)+"{count}",
+	"dfppcnt": ("Dir passed file percentage: "     *_header)+"{percent}",
 }
 
 class JSObj:
@@ -246,8 +262,8 @@ def fileContentsDontMatter():
 	return parsedArgs.dont_print_matches\
 	       and not any(parsedArgs.regex)\
 	       and not parsedArgs.file_regex       and not parsedArgs.file_anti_regex\
-	       and "fm" not in parsedArgs.limit    and "dm" not in parsedArgs.limit and "tm" not in parsedArgs.limit\
-	       and "fm" not in parsedArgs.count    and "dm" not in parsedArgs.count and "tm" not in parsedArgs.count
+	       and not {"fm", "dm", "tm"}.intersection(parsedArgs.limit.keys())\
+	       and not {"fm", "dm", "tm"}.intersection(parsedArgs.count)
 
 def getFiles():
 	"""
@@ -262,7 +278,7 @@ def getFiles():
 			This is just here so I don't have to write the mmap code twice
 			Probably could replace the array addition with a few `yield from`s
 		"""
-		
+
 		# Files
 		verbose("Yielding files")
 		# --stdin-files
@@ -270,7 +286,7 @@ def getFiles():
 			yield from sys.stdin.read().splitlines()
 		# --file
 		yield from parsedArgs.file
-		
+
 		# Globs
 		verbose("Yielding globs") # r/PythonOOC
 		# --stdin-globs
@@ -343,25 +359,37 @@ totalFiles=0
 fileDir=None
 lastDir=None
 
-runData={"file":{}, "dir":{"files":0, "matches":[]}, "total":{"dirs":0}}
+runData={
+	"file":{},
+	"dir":{"files":0, "matches":[], "failedFiles":0, "passedFiles":0},
+	"total":{"dirs":0}
+}
 
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
 	verbose(f"Processing {file}")
 	runData["file"]={"matches":[], "fmc":[]}
 	printedName=False
 
+	if file["isDir"]:
+		continue
+
 	# Handle --name-regex, --full-name-regex, --name-anti-regex, and--full-name-anti-regex
+	if any(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_ignore_regex     )) or\
+	   any(map(lambda x:re.search(x, os.path.realpath(file["name"])), parsedArgs.full_name_ignore_regex)):
+	   verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name ignore regexes")
+	   continue
 	if not all(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_regex          )) or\
 	   not all(map(lambda x:re.search(x, os.path.realpath(file["name"])), parsedArgs.full_name_regex     )) or\
 	       any(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_anti_regex     )) or\
 	       any(map(lambda x:re.search(x, os.path.realpath(file["name"])), parsedArgs.full_name_anti_regex)):
 		# Really should make how this works configurable
 		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
+		runData["dir"]["failedFiles"]+=1
 		continue
 
+	runData["dir"]["passedFiles"]+=1
+
 	# --file-limit, --dir-match-limit, --dir-file-count, and --dir-match-count
-	if file["isDir"]:
-		continue
 	lastDir=fileDir
 	fileDir=os.path.dirname(file["name"])
 
@@ -371,7 +399,16 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			print(ofmt["dmcnt"].format(count=runData["dir"]["matches"]))
 		if "df" in parsedArgs.count:
 			print(ofmt["dfcnt"].format(count=runData["dir"]["files"]))
+		if "dff" in parsedArgs.count:
+			print(ofmt["dffcnt"].format(count=runData["dir"]["failedFiles"]))
+		if "dffp" in parsedArgs.count:
+			print(ofmt["dffpcnt"].format(percent=runData["dir"]["failedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
+		if "dfp" in parsedArgs.count:
+			print(ofmt["dfpcnt"].format(count=(runData["dir"]["passedFiles"])))
+		if "dfpp" in parsedArgs.count:
+			print(ofmt["dfppcnt"].format(percent=runData["dir"]["passedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
 
+	# --limit td
 	if _TDL and len(runData["dir"].keys())>=_TDL:
 		continue
 
@@ -382,7 +419,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# Keeps track of, well, directory data
 	if fileDir!=lastDir:
-		runData["dir"]={"files":0, "matches":[]}
+		runData["dir"]={"files":0, "matches":[], "failedFiles":0, "passedFiles":1}
 
 	# Handle --file-limit
 	# Really slow on big directories
@@ -390,6 +427,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		continue
 	runData["dir"]["files"]+=1
 
+	# There aren't any matches to handle
 	if file["isDir"]:
 		continue
 
@@ -408,6 +446,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			# Handle --file-regex and --file-anti-regex
 			_fileRegexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
 			if any(map(_fileRegexCheck, parsedArgs.file_anti_regex)) or not all(map(_fileRegexCheck, parsedArgs.file_regex)):
+				# Move to the next file
 				_continue=True
 				break
 
@@ -420,10 +459,9 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 			# Handle --replace
 			if parsedArgs.replace:
-				if len(parsedArgs.replace)==1:
-					replacement=parsedArgs.replace[0]
-				elif len(parsedArgs.replace)==len(parsedArgs.regex):
-					replacement=parsedArgs.replace[regexIndex]
+				# Replacements can only be of length 1 or equal to the num of regexes
+				# So %len(replace) works as shorthand for the if statment
+				replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
 				matches=findAllSubs(regex, replacement.encode(errors="ignore"), file["data"])
 			else:
 				matches=re.finditer(regex, file["data"])
@@ -502,11 +540,12 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			for regexIndex, match in enumerate(matches):
 				printMatch(match, regexIndex)
 
-	# Print match count (--count)
+	# --coung fm
 	if "fm" in parsedArgs.count:
 		for regexIndex, count in enumerate(runData["file"]["fmc"]):
 			print(ofmt["fmcnt"].format(count=count, regexIndex=regexIndex))
 
+	# For if a file failes the --name-regex stuff
 	if _continue:
 		continue
 
@@ -521,6 +560,14 @@ if fileDir!=None:
 			print(ofmt["dmcnt"].format(count=count, regexIndex=regexIndex))
 	if "df" in parsedArgs.count:
 		print(ofmt["dfcnt"].format(count=runData["dir"]["files"]))
+	if "dff" in parsedArgs.count:
+		print(ofmt["dffcnt"].format(count=runData["dir"]["failedFiles"]))
+	if "dffp" in parsedArgs.count:
+		print(ofmt["dffpcnt"].format(percent=runData["dir"]["failedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
+	if "dfp" in parsedArgs.count:
+		print(ofmt["dfpcnt"].format(count=(runData["dir"]["passedFiles"])))
+	if "dfpp" in parsedArgs.count:
+		print(ofmt["dfppcnt"].format(percent=runData["dir"]["passedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
 
 # --total-match-count, --total-file-count, and --total-dir-count
 if "tm" in parsedArgs.count:
