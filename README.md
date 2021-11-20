@@ -94,5 +94,5 @@ options:
 
 Some example snippits:
 
-- `jrep -g *.py -NCH` - Count all `.py` files in a directory
-- `jrep -g */*.mp4 -nNd --limit df=5 | jrep "Directory: (.+)(\nFile: .+){5}" -r \1 -H` - List all directories with 5 or more `.mp4` files
+- `jrep -g *.py -NH --count df` - Count all `.py` files in a directory
+- `jrep -g */*.mp4 -Nd --limit df=5 --count df | jrep "Directory: (.+)\nDir file count: 5" -r \1 -H` - List all directories with 5 or more `.mp4` files

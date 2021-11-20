@@ -16,7 +16,7 @@ def parseLCName(name):
 	r=genOpts(r"file"         , r"dir"            , r"total")    +r"[-_]?"+\
 	  genOpts(r"match(?:e?s)?", r"files?"         , r"dirs?")    +r"[-_]?"+\
 	  genOpts(r"failures?"    , r"pass(?:e?[sd])?"          )+"?"+r"[-_]?"+\
-	  genOpts(r"percents?")                         +"?"
+	  genOpts(r"percents?"                                  )+"?"
 	m=re.match(r, name)
 	return m and "".join(filter(lambda x:x, m.groups())).lower()
 
@@ -80,6 +80,7 @@ parser.add_argument("--count"               , "-c", nargs="+", default=[], actio
 parser.add_argument("--limit"               , "-l", nargs="+", default={}, action=LimitAction, help="Count match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
 
 parser.add_argument("--depth-first"         ,       action="store_true"  , help="Enter subdirectories before processing files")
+parser.add_argument("--glob-root-dir"       ,                              help="Root dir to run globs in")
 
 parser.add_argument("--print-whole-lines"         , action="store_true", help="Print whole lines like FINDSTR")
 parser.add_argument("--print-non-matching-files"  , action="store_true", help="Print file names with no matches")
@@ -100,42 +101,96 @@ def warn(x):
 verbose("JREP preview version")
 verbose(parsedArgs)
 
-def _rlistdirBreadthFirst(dirname, dir_fd, dironly):
-	"""
-		Make glob.glob only enter subdirectories after all files in a directory have been processed
-		Copied directly from the glob module with a few tweaks
-		Not sure on the copytight of that
-	"""
-	names = glob._listdir(dirname, dir_fd, dironly)
-	directories=[]
-	for x in names:
-		if not glob._ishidden(x):
-			yield x
-			path = glob._join(dirname, x) if dirname else x
-			if os.path.isdir(path):
-				directories.append(path)
-	for directory in directories:
-		for y in _rlistdirBreadthFirst(directory, dir_fd, dironly):
-			yield glob._join(directory, y)
-
-def _rlistdirDepthFirst(dirname, dir_fd, dironly):
-	names = glob._listdir(dirname, dir_fd, dironly)
-	files=[]
-	for x in names:
-		if not glob._ishidden(x):
-			if os.path.isfile(x):
-				files.append(x)
+def _iterdirBreadthFirst(dirname, dir_fd, dironly):
+	try:
+		fd = None
+		fsencode = None
+		directories=[]
+		if dir_fd is not None:
+			if dirname:
+				fd = arg = os.open(dirname, _dir_open_flags, dir_fd=dir_fd)
 			else:
-				yield x
-			path = glob._join(dirname, x) if dirname else x
-			for y in _rlistdirDepthFirst(path, dir_fd, dironly):
-				yield glob._join(x, y)
-	yield from files
+				arg = dir_fd
+			if isinstance(dirname, bytes):
+				fsencode = os.fsencode
+		elif dirname:
+			arg = dirname
+		elif isinstance(dirname, bytes):
+			arg = bytes(os.curdir, 'ASCII')
+		else:
+			arg = os.curdir
+		try:
+			with os.scandir(arg) as it:
+				for entry in it:
+					try:
+						if not dironly or entry.is_dir():
+							if entry.is_dir():
+								directories.append(entry)
+							else:
+								if fsencode is not None:
+									yield fsencode(entry.name)
+								else:
+									yield entry.name
+					except OSError:
+						pass
+				for directory in directories:
+					if fsencode is not None:
+						yield fsencode(directory.name)
+					else:
+						yield directory.name
+		finally:
+			if fd is not None:
+				os.close(fd)
+	except OSError:
+		return
+
+def _iterdirDepthFirst(dirname, dir_fd, dironly):
+	try:
+		fd = None
+		fsencode = None
+		files=[]
+		if dir_fd is not None:
+			if dirname:
+				fd = arg = os.open(dirname, _dir_open_flags, dir_fd=dir_fd)
+			else:
+				arg = dir_fd
+			if isinstance(dirname, bytes):
+				fsencode = os.fsencode
+		elif dirname:
+			arg = dirname
+		elif isinstance(dirname, bytes):
+			arg = bytes(os.curdir, 'ASCII')
+		else:
+			arg = os.curdir
+		try:
+			with os.scandir(arg) as it:
+				for entry in it:
+					try:
+						if not dironly or entry.is_dir():
+							if not entry.is_dir():
+								files.append(entry)
+							else:
+								if fsencode is not None:
+									yield fsencode(entry.name)
+								else:
+									yield entry.name
+					except OSError:
+						pass
+				for file in files:
+					if fsencode is not None:
+						yield fsencode(file.name)
+					else:
+						yield file.name
+		finally:
+			if fd is not None:
+				os.close(fd)
+	except OSError:
+		return
 
 if parsedArgs.depth_first:
-	glob._rlistdir=_rlistdirDepthFirst
+	glob._iterdir=_iterdirDepthFirst
 else:
-	glob._rlistdir=_rlistdirBreadthFirst
+	glob._iterdir=_iterdirBreadthFirst
 
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
 	print("Error: Length of --replace must be either 1 or equal to the number of regexes", file=sys.stderr)
@@ -173,6 +228,30 @@ ofmt={
 	"dfpcnt" : ("Dir passed file count: "          *_header)+"{count}",
 	"dfppcnt": ("Dir passed file percentage: "     *_header)+"{percent}",
 }
+
+def handleCount(rules, runData):
+	if "newDir" in rules:
+		if "dm" in parsedArgs.count:
+			for regexIndex, count in enumerate(runData["dir"]["matches"]):
+				print(ofmt["dmcnt"].format(count=count, regexIndex=regexIndex))
+		if "df" in parsedArgs.count:
+			print(ofmt["dfcnt"].format(count=runData["dir"]["files"]))
+		if "dff" in parsedArgs.count:
+			print(ofmt["dffcnt"].format(count=runData["dir"]["failedFiles"]))
+		if "dffp" in parsedArgs.count:
+			print(ofmt["dffpcnt"].format(percent=runData["dir"]["failedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
+		if "dfp" in parsedArgs.count:
+			print(ofmt["dfpcnt"].format(count=(runData["dir"]["passedFiles"])))
+		if "dfpp" in parsedArgs.count:
+			print(ofmt["dfppcnt"].format(percent=runData["dir"]["passedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
+
+	if "total" in rules:
+		if "tm" in parsedArgs.count:
+			print(ofmt["tmcnt"].format(count=totalMatches))
+		if "tf" in parsedArgs.count:
+			print(ofmt["tfcnt"].format(count=totalFiles))
+		if "td" in parsedArgs.count:
+			print(ofmt["tdcnt"].format(count=runData["total"]["dirs"]))
 
 class JSObj:
 	"""
@@ -395,18 +474,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# --dir-match-count and --dir-file-count
 	if lastDir!=None and lastDir!=fileDir:
-		if "dm" in parsedArgs.count:
-			print(ofmt["dmcnt"].format(count=runData["dir"]["matches"]))
-		if "df" in parsedArgs.count:
-			print(ofmt["dfcnt"].format(count=runData["dir"]["files"]))
-		if "dff" in parsedArgs.count:
-			print(ofmt["dffcnt"].format(count=runData["dir"]["failedFiles"]))
-		if "dffp" in parsedArgs.count:
-			print(ofmt["dffpcnt"].format(percent=runData["dir"]["failedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
-		if "dfp" in parsedArgs.count:
-			print(ofmt["dfpcnt"].format(count=(runData["dir"]["passedFiles"])))
-		if "dfpp" in parsedArgs.count:
-			print(ofmt["dfppcnt"].format(percent=runData["dir"]["passedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
+		handleCount(rules=["newDir"], runData=runData)
 
 	# --limit td
 	if _TDL and len(runData["dir"].keys())>=_TDL:
@@ -472,7 +540,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				# Print file name
 				if not printedName:
 					if parsedArgs.print_file_names:
-						print(ofmt["fname"].format(fname=processFileName(file["name"])))
+						sys.stdout.buffer.write(ofmt["fname"].format(fname=processFileName(file["name"])).encode())
+						sys.stdout.buffer.write(b"\n")
 					printedName=True
 					totalFiles+=1
 
@@ -540,7 +609,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			for regexIndex, match in enumerate(matches):
 				printMatch(match, regexIndex)
 
-	# --coung fm
+	# --count fm
 	if "fm" in parsedArgs.count:
 		for regexIndex, count in enumerate(runData["file"]["fmc"]):
 			print(ofmt["fmcnt"].format(count=count, regexIndex=regexIndex))
@@ -555,24 +624,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 # --dir-match-count and --dir-file count
 if fileDir!=None:
-	if "dm" in parsedArgs.count:
-		for regexIndex, count in enumerate(runData["dir"]["matches"]):
-			print(ofmt["dmcnt"].format(count=count, regexIndex=regexIndex))
-	if "df" in parsedArgs.count:
-		print(ofmt["dfcnt"].format(count=runData["dir"]["files"]))
-	if "dff" in parsedArgs.count:
-		print(ofmt["dffcnt"].format(count=runData["dir"]["failedFiles"]))
-	if "dffp" in parsedArgs.count:
-		print(ofmt["dffpcnt"].format(percent=runData["dir"]["failedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
-	if "dfp" in parsedArgs.count:
-		print(ofmt["dfpcnt"].format(count=(runData["dir"]["passedFiles"])))
-	if "dfpp" in parsedArgs.count:
-		print(ofmt["dfppcnt"].format(percent=runData["dir"]["passedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
+	handleCount(rules=["newDir"], runData=runData)
 
 # --total-match-count, --total-file-count, and --total-dir-count
-if "tm" in parsedArgs.count:
-	print(ofmt["tmcnt"].format(count=totalMatches))
-if "tf" in parsedArgs.count:
-	print(ofmt["tfcnt"].format(count=totalFiles))
-if "td" in parsedArgs.count:
-	print(ofmt["tdcnt"].format(count=runData["total"]["dirs"]))
+handleCount(rules=["total"], runData=runData)
