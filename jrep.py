@@ -39,6 +39,16 @@ class CountAction(argparse.Action):
 			elif value not in values: values.append(value)
 		setattr(namespace, self.dest, values)
 
+class MatchRegexAction(argparse.Action):
+	def __call__(self, parser, namespace, values, option_string):
+		ret=[[]]
+		for x in values:
+			if x=="*":
+				ret.append([])
+			else:
+				ret[-1].append(x.encode())
+		setattr(namespace, self.dest, ret)
+
 parser=argparse.ArgumentParser()
 
 parser.add_argument("regex"                 ,       nargs="*", default=[""], help="Regex(es) to process matches for")
@@ -53,14 +63,17 @@ _stdin.add_argument("--stdin-files"         , "-F", action="store_true"  , help=
 _stdin.add_argument("--stdin-globs"         , "-G", action="store_true"  , help="Treat STDIN as a list of globs")
 
 parser.add_argument("--name-regex"            , "-t", nargs="+", default=[], help="Regex to test relative file names for")
+parser.add_argument("--name-anti-regex"       ,       nargs="+", default=[], help="Like --name-regex but excludes file names that match")
+parser.add_argument("--name-ignore-regex"     ,       nargs="+", default=[], help="Like --name-anti-regex but doesn't contribute to --count dir-failed-files")
 parser.add_argument("--full-name-regex"       , "-T", nargs="+", default=[], help="Regex to test absolute file names for")
-parser.add_argument("--name-anti-regex"       ,       nargs="+", default=[], help="Like --name-regex      but excludes file names that match")
 parser.add_argument("--full-name-anti-regex"  ,       nargs="+", default=[], help="Like --full-name-regex but excludes file names that match")
-parser.add_argument("--name-ignore-regex"     ,       nargs="+", default=[], help="Like --name-anti-regex      but doesn't contribute to --count dir-failed-files")
 parser.add_argument("--full-name-ignore-regex",       nargs="+", default=[], help="Like --full-name-anti-regex but doesn't contribute to --count dir-failed-files")
 
 parser.add_argument("--file-regex"          ,       nargs="+", default=[], help="Regexes to test file contents for")
 parser.add_argument("--file-anti-regex"     ,       nargs="+", default=[], help="Like --file-regex but excludes files that match")
+
+parser.add_argument("--match-regex"         ,       nargs="+", default=[], action=MatchRegexAction, help="Only output match if, adter --replace and --sub, it matches all of these regexes (unimplemented)")
+parser.add_argument("--match-anti-regex"    ,       nargs="+", default=[], action=MatchRegexAction, help="Only output match if, adter --replace and --sub, it doesn't fail any of these regexes (unimplemented)")
 
 parser.add_argument("--sort"                , "-S",                        help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available (todo: document)")
 parser.add_argument("--no-headers"          , "-H", action="store_true"  , help="Don't print match: or file: before lines")
@@ -502,7 +515,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	# Main matching stuff
 	_continue=False # PEP-3136 would've come in clutch here
 	matchIndex=0 # Just makes --XYZ-match-count stuff and --print-non-matching-files easier
-	for regexIndex, regex in enumerate(parsedArgs.regex):
+	for (regexIndex, regex), matchRegex, matchAntiRegex in itertools.zip_longest(enumerate(parsedArgs.regex), parsedArgs.match_regex, parsedArgs.match_anti_regex, fillvalue=[]):
 		verbose(f"Handling regex {regexIndex}: {regex}")
 
 		if parsedArgs.weave_matches:
@@ -537,14 +550,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			# Process matches
 			matchIndex=0
 			for matchIndex, match in enumerate(matches, start=1):
-				# Print file name
-				if not printedName:
-					if parsedArgs.print_file_names:
-						sys.stdout.buffer.write(ofmt["fname"].format(fname=processFileName(file["name"])).encode())
-						sys.stdout.buffer.write(b"\n")
-					printedName=True
-					totalFiles+=1
-
 				totalMatches+=1
 				runData["dir"]["matches"][-1]+=1
 				runData["file"]["fmc"][-1]+=1
@@ -580,8 +585,20 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 						0: file["data"][lineStart:lineEnd]
 					})
 
+				if not all(map(lambda x:re.search(x, match[0]), matchRegex    )) or\
+				       any(map(lambda x:re.search(x, match[0]), matchAntiRegex)):
+					continue
+
 				# Print matches
 				if not parsedArgs.dont_print_matches and match[0] not in matchedStrings:
+					# Print file name
+					if not printedName:
+						if parsedArgs.print_file_names:
+							sys.stdout.buffer.write(ofmt["fname"].format(fname=processFileName(file["name"])).encode())
+							sys.stdout.buffer.write(b"\n")
+						printedName=True
+						totalFiles+=1
+
 					if parsedArgs.weave_matches:
 						runData["file"]["matches"][-1].append(match)
 					else:
