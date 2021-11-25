@@ -262,9 +262,10 @@ def handleCount(rules, runData):
 
 	if "total" in rules:
 		if "tm" in parsedArgs.count:
-			print(ofmt["tmcnt"].format(count=totalMatches))
+			for regexIndex, count in enumerate(runData["total"]["matches"]):
+				print(ofmt["tmcnt"].format(count=count, regexIndex=regexIndex))
 		if "tf" in parsedArgs.count:
-			print(ofmt["tfcnt"].format(count=totalFiles))
+			print(ofmt["tfcnt"].format(count=runData["total"]["files"]))
 		if "td" in parsedArgs.count:
 			print(ofmt["tdcnt"].format(count=runData["total"]["dirs"]))
 
@@ -428,36 +429,15 @@ _TFL=parsedArgs.limit["tf"] if "tf" in parsedArgs.limit else 0
 _TDL=parsedArgs.limit["td"] if "td" in parsedArgs.limit else 0
 
 # Tracking stuffs
-matchedStrings=[] # --no-duplicates handler
-totalMatches=0
-totalFiles=0
 fileDir=None
 lastDir=None
 
 runData={
 	"file":{},
 	"dir":{"files":0, "matches":[], "failedFiles":0, "passedFiles":0},
-	"total":{"dirs":0, "files":0, "matches":0}
+	"total":{"dirs":0, "files":0, "matches":[0 for x in range(len(parsedArgs.regex))]},
+	"matchedStrings":[]  # --no-duplicates handler
 }
-
-def findAllSubs(pattern, replace, string):
-	"""
-		re.sub but yield all replaced substrings instead of returning the final string
-		This is a very slow function but it works
-		Runs re.sub with the count kwarg set to increasing values
-		It uses this to keep track of how much the string length changes to find out what parts of the result to return
-	"""
-	offs=0
-	last=string
-	for index, match in enumerate(re.finditer(pattern, string), start=1):
-		subbed=re.sub(pattern, replace, string, count=index)
-		loffs=offs
-		offs+=len(subbed)-len(last)
-		yield JSObj({
-			"span": lambda:(loffs+match.span()[0],offs+match.span()[1]),
-			0     :  subbed[loffs+match.span()[0]:offs+match.span()[1]]
-		})
-		last=subbed
 
 def delayedSub(repl, match):
 	parsedTemplate=sre_parse.parse_template(repl, match.re)
@@ -500,17 +480,18 @@ def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 
 class Continue(Exception):
 	pass
-class PrintedName(Exception):
-	pass
 
 def funcMatchRegex(matchRegex, matchAntiRegex, match, **kwargs):
 	if not all(map(lambda x:re.search(x, match[0]), matchRegex    )) or\
        any(map(lambda x:re.search(x, match[0]), matchAntiRegex)):
 		raise Continue()
 
-def funcPrintMatches(parsedArgs, file, printedName, **kwargs):
+class PrintedName(Exception):
+	pass
+
+def funcPrintMatches(parsedArgs, file, printedName, regexIndex, **kwargs):
 	# Print matches
-	if match[0] not in matchedStrings:
+	if match[0] not in runData["matchedStrings"]:
 		# Print file name
 		if not printedName:
 			if parsedArgs.print_file_names:
@@ -520,7 +501,7 @@ def funcPrintMatches(parsedArgs, file, printedName, **kwargs):
 
 		if not parsedArgs.dont_print_matches:
 			if parsedArgs.weave_matches:
-				runData["file"]["matches"][-1].append(match)
+				runData["file"]["matches"][regexIndex].append(match)
 			else:
 				printMatch(match, regexIndex)
 	raise PrintedName
@@ -528,7 +509,7 @@ def funcPrintMatches(parsedArgs, file, printedName, **kwargs):
 def funcNoDuplicates(parsedArgs, match, **kwargs):
 	# Handle --no-duplicates
 	if parsedArgs.no_duplicates:
-		matchedStrings.append(match[0])
+		runData["matchedStrings"].append(match[0])
 
 
 funcs={
@@ -542,7 +523,7 @@ funcs={
 
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
 	verbose(f"Processing {file}")
-	runData["file"]={"matches":[], "fmc":[]}
+	runData["file"]={"matches":[list() for x in range(len(parsedArgs.regex))], "fmc":[0 for x in range(len(parsedArgs.regex))]}
 	printedName=False
 
 	if file["isDir"]:
@@ -577,13 +558,13 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		continue
 
 	# --print-directories
-	if parsedArgs.print_directories and fileDir!=lastDir:
+	if fileDir!=lastDir:
 		runData["total"]["dirs"]+=1
 		print(ofmt["dname"].format(dname=processDirName(fileDir)))
 
 	# Keeps track of, well, directory data
 	if fileDir!=lastDir:
-		runData["dir"]={"files":0, "matches":[], "failedFiles":0, "passedFiles":1}
+		runData["dir"]={"files":0, "matches":[0 for x in range(len(parsedArgs.regex))], "failedFiles":0, "passedFiles":1}
 
 	# Handle --file-limit
 	# Really slow on big directories
@@ -603,8 +584,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 		if parsedArgs.weave_matches:
 			runData["file"]["matches"].append([])
-		runData["dir"]["matches"].append(0)
-		runData["file"]["fmc"].append(0)
+		#runData["dir"]["matches"].append(0)
+		#runData["file"]["fmc"].append(0)
 
 		try:
 			# Handle --file-regex and --file-anti-regex
@@ -621,30 +602,20 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			if parsedArgs.string:
 				regex=re.escape(regex)
 
-			# Handle --replace
-			#if parsedArgs.replace:
-			#	# Replacements can only be of length 1 or equal to the num of regexes
-			#	# So %len(replace) works as shorthand for the if statment
-			#	replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
-			#	matches=findAllSubs(regex, replacement.encode(errors="ignore"), file["data"])
-			#else:
 			matches=re.finditer(regex, file["data"])
 
 			# Process matches
 			matchIndex=0
-			#
-			# AAAAAAAAAAAAAAAAAAAAAAAA
-			# AAAAAAAAAAAAAAAAAAAAAAAA
-			# AAAAAAAAAAAAAAAAAAAAAAAA
-			#
 			for matchIndex, match in enumerate(matches, start=1):
-				totalMatches+=1
-				runData["dir"]["matches"][-1]+=1
-				runData["file"]["fmc"][-1]+=1
+				runData["total"]["matches"][regexIndex]+=1
+				runData["dir"]["matches"][regexIndex]+=1
+				runData["file"]["fmc"][regexIndex]+=1
 
 				try:
 					for func in parsedArgs.order:
 						match=funcs[func](
+							regexIndex=regexIndex,
+							regex=regex,
 							matchRegex=matchRegex,
 							matchAntiRegex=matchAntiRegex,
 							file=file,
@@ -657,21 +628,10 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				except PrintedName:
 					printedName=True
 
-				# Quick optimization for when someone just wants filenames
-				#if fileContentsDontMatter():
-				#	verbose("Optimizing away actually reading the file")
-				#	break
-
-				# Makes further pseudo-re.match shenanigans easier
-				#match=JSObj({
-				#	0     : match[0],
-				#	"span": match.span
-				#})
-
 				# Handle --match-limit, --dir-match-limit, and --total-match-limit
 				if (_FML!=0 and matchIndex>=_FML) or\
 				   (_DML!=0 and runData["dir"]["matches"]>=_DML) or\
-				   (_TML!=0 and totalMatches>=_TML):
+				   (_TML!=0 and runData["total"]["matches"]>=_TML):
 					break
 
 		except Exception as AAAAA:
@@ -696,7 +656,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		continue
 
 	# Hanlde --total-match-limit and --total-file-limit
-	if (_TML!=0 and totalMatches>=_TML) or (_TFL!=0 and fileIndex>=_TFL):
+	if (_TML!=0 and runData["total"]["matches"]>=_TML) or (_TFL!=0 and fileIndex>=_TFL):
 		break
 
 # --dir-match-count and --dir-file count
