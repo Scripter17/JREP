@@ -590,7 +590,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					continue
 
 				# Print matches
-				if not parsedArgs.dont_print_matches and match[0] not in matchedStrings:
+				if match[0] not in matchedStrings:
 					# Print file name
 					if not printedName:
 						if parsedArgs.print_file_names:
@@ -599,10 +599,11 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 						printedName=True
 						totalFiles+=1
 
-					if parsedArgs.weave_matches:
-						runData["file"]["matches"][-1].append(match)
-					else:
-						printMatch(match, regexIndex)
+					if not parsedArgs.dont_print_matches:
+						if parsedArgs.weave_matches:
+							runData["file"]["matches"][-1].append(match)
+						else:
+							printMatch(match, regexIndex)
 
 				# Handle --no-duplicates
 				if parsedArgs.no_duplicates:
