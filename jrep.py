@@ -1,4 +1,4 @@
-import argparse, os, sys, re, glob, mmap, copy, itertools, functools, itertools
+import argparse, os, sys, re, glob, mmap, copy, itertools, functools, itertools, sre_parse
 
 """
 	JREP
@@ -95,11 +95,13 @@ parser.add_argument("--limit"               , "-l", nargs="+", default={}, actio
 parser.add_argument("--depth-first"         ,       action="store_true"  , help="Enter subdirectories before processing files")
 parser.add_argument("--glob-root-dir"       ,                              help="Root dir to run globs in")
 
-parser.add_argument("--print-whole-lines"         , action="store_true", help="Print whole lines like FINDSTR")
+parser.add_argument("--match-whole-lines"         , action="store_true", help="Match whole lines like FINDSTR")
 parser.add_argument("--print-non-matching-files"  , action="store_true", help="Print file names with no matches")
 parser.add_argument("--no-warn"                   , action="store_true", help="Don't print warning messages")
 parser.add_argument("--weave-matches"       , "-w", action="store_true", help="Weave regex matchdes")
 parser.add_argument("--strict-weave"        , "-W", action="store_true", help="Only print full match sets")
+
+parser.add_argument("--order"               ,       nargs="+", default=["replace", "sub", "match-whole-lines", "match-regex", "print-matches", "no-duplicates"], help="The order in which handling is done to matches")
 
 parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
 parsedArgs=parser.parse_args()
@@ -331,25 +333,6 @@ def sortFiles(files, key=None):
 
 	return sorted(files, key=sorts[key])
 
-def findAllSubs(pattern, replace, string):
-	"""
-		re.sub but yield all replaced substrings instead of returning the final string
-		This is a very slow function but it works
-		Runs re.sub with the count kwarg set to increasing values
-		It uses this to keep track of how much the string length changes to find out what parts of the result to return
-	"""
-	offs=0
-	last=string
-	for index, match in enumerate(re.finditer(pattern, string), start=1):
-		subbed=re.sub(pattern, replace, string, count=index)
-		loffs=offs
-		offs+=len(subbed)-len(last)
-		yield JSObj({
-			"span": lambda:(loffs+match.span()[0],offs+match.span()[1]),
-			0     :  subbed[loffs+match.span()[0]:offs+match.span()[1]]
-		})
-		last=subbed
-
 def fileContentsDontMatter():
 	return parsedArgs.dont_print_matches\
 	       and not any(parsedArgs.regex)\
@@ -454,7 +437,107 @@ lastDir=None
 runData={
 	"file":{},
 	"dir":{"files":0, "matches":[], "failedFiles":0, "passedFiles":0},
-	"total":{"dirs":0}
+	"total":{"dirs":0, "files":0, "matches":0}
+}
+
+def findAllSubs(pattern, replace, string):
+	"""
+		re.sub but yield all replaced substrings instead of returning the final string
+		This is a very slow function but it works
+		Runs re.sub with the count kwarg set to increasing values
+		It uses this to keep track of how much the string length changes to find out what parts of the result to return
+	"""
+	offs=0
+	last=string
+	for index, match in enumerate(re.finditer(pattern, string), start=1):
+		subbed=re.sub(pattern, replace, string, count=index)
+		loffs=offs
+		offs+=len(subbed)-len(last)
+		yield JSObj({
+			"span": lambda:(loffs+match.span()[0],offs+match.span()[1]),
+			0     :  subbed[loffs+match.span()[0]:offs+match.span()[1]]
+		})
+		last=subbed
+
+def delayedSub(repl, match):
+	parsedTemplate=sre_parse.parse_template(repl, match.re)
+	for x in parsedTemplate[0]:
+		parsedTemplate[1][x[0]]=match[x[1]]
+	return JSObj({
+		"span":match.span,
+		0:type(parsedTemplate[1][0])().join(parsedTemplate[1])
+	})
+
+def funcReplace(parsedArgs, match, **kwargs):
+	if parsedArgs.replace:
+		replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
+		match=delayedSub(replacement.encode(errors="ignore"), match)
+	return match
+
+def funcSub(parsedArgs, match, **kwargs):
+	# Handle --sub
+	# TYSM mCoding for explaining how zip works
+	# (zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
+	for pair in zip(parsedArgs.sub[0::2], parsedArgs.sub[1::2]):
+		match=JSObj({
+			**match,
+			0: re.sub(pair[0].encode(), pair[1].encode(), match[0])
+		})
+	return match
+
+def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
+	# --match-whole-lines
+	if parsedArgs.match_whole_lines:
+		lineStart=file["data"].rfind(b"\n", 0, match.span()[1])
+		lineEnd  =file["data"]. find(b"\n",    match.span()[1])
+		if lineStart==-1: lineStart=None
+		if lineEnd  ==-1: lineEnd  =None
+		return JSObj({
+			**match,
+			0: file["data"][lineStart:match.span()[0]]+match[0]+file["data"][match.span()[1]:lineEnd]
+		})
+	return match
+
+class Continue(Exception):
+	pass
+class PrintedName(Exception):
+	pass
+
+def funcMatchRegex(matchRegex, matchAntiRegex, match, **kwargs):
+	if not all(map(lambda x:re.search(x, match[0]), matchRegex    )) or\
+       any(map(lambda x:re.search(x, match[0]), matchAntiRegex)):
+		raise Continue()
+
+def funcPrintMatches(parsedArgs, file, printedName, **kwargs):
+	# Print matches
+	if match[0] not in matchedStrings:
+		# Print file name
+		if not printedName:
+			if parsedArgs.print_file_names:
+				sys.stdout.buffer.write(ofmt["fname"].format(fname=processFileName(file["name"])).encode())
+				sys.stdout.buffer.write(b"\n")
+			runData["total"]["files"]+=1
+
+		if not parsedArgs.dont_print_matches:
+			if parsedArgs.weave_matches:
+				runData["file"]["matches"][-1].append(match)
+			else:
+				printMatch(match, regexIndex)
+	raise PrintedName
+
+def funcNoDuplicates(parsedArgs, match, **kwargs):
+	# Handle --no-duplicates
+	if parsedArgs.no_duplicates:
+		matchedStrings.append(match[0])
+
+
+funcs={
+	"replace": funcReplace,
+	"sub": funcSub,
+	"match-whole-lines": funcMatchWholeLines,
+	"match-regex": funcMatchRegex,
+	"print-matches": funcPrintMatches,
+	"no-duplicates": funcNoDuplicates
 }
 
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
@@ -539,75 +622,51 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				regex=re.escape(regex)
 
 			# Handle --replace
-			if parsedArgs.replace:
-				# Replacements can only be of length 1 or equal to the num of regexes
-				# So %len(replace) works as shorthand for the if statment
-				replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
-				matches=findAllSubs(regex, replacement.encode(errors="ignore"), file["data"])
-			else:
-				matches=re.finditer(regex, file["data"])
+			#if parsedArgs.replace:
+			#	# Replacements can only be of length 1 or equal to the num of regexes
+			#	# So %len(replace) works as shorthand for the if statment
+			#	replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
+			#	matches=findAllSubs(regex, replacement.encode(errors="ignore"), file["data"])
+			#else:
+			matches=re.finditer(regex, file["data"])
 
 			# Process matches
 			matchIndex=0
+			#
+			# AAAAAAAAAAAAAAAAAAAAAAAA
+			# AAAAAAAAAAAAAAAAAAAAAAAA
+			# AAAAAAAAAAAAAAAAAAAAAAAA
+			#
 			for matchIndex, match in enumerate(matches, start=1):
 				totalMatches+=1
 				runData["dir"]["matches"][-1]+=1
 				runData["file"]["fmc"][-1]+=1
 
+				try:
+					for func in parsedArgs.order:
+						match=funcs[func](
+							matchRegex=matchRegex,
+							matchAntiRegex=matchAntiRegex,
+							file=file,
+							printedName=printedName,
+							parsedArgs=parsedArgs,
+							match=match
+						) or match
+				except Continue:
+					continue
+				except PrintedName:
+					printedName=True
+
 				# Quick optimization for when someone just wants filenames
-				if fileContentsDontMatter():
-					verbose("Optimizing away actually reading the file")
-					break
+				#if fileContentsDontMatter():
+				#	verbose("Optimizing away actually reading the file")
+				#	break
 
 				# Makes further pseudo-re.match shenanigans easier
-				match=JSObj({
-					0     : match[0],
-					"span": match.span
-				})
-
-				# Handle --sub
-				# TYSM mCoding for explaining how zip works
-				# (zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
-				for pair in zip(parsedArgs.sub[0::2], parsedArgs.sub[1::2]):
-					match=JSObj({
-						**match,
-						0: re.sub(pair[0].encode(), pair[1].encode(), match[0])
-					})
-
-				# --print-whole-lines
-				if parsedArgs.print_whole_lines:
-					lineStart=file["data"].rfind(b"\n", 0, match.span()[1])
-					lineEnd  =file["data"]. find(b"\n",    match.span()[1])
-					if lineStart==-1: lineStart=None
-					if lineEnd  ==-1: lineEnd  =None
-					match=JSObj({
-						**match,
-						0: file["data"][lineStart:lineEnd]
-					})
-
-				if not all(map(lambda x:re.search(x, match[0]), matchRegex    )) or\
-				       any(map(lambda x:re.search(x, match[0]), matchAntiRegex)):
-					continue
-
-				# Print matches
-				if match[0] not in matchedStrings:
-					# Print file name
-					if not printedName:
-						if parsedArgs.print_file_names:
-							sys.stdout.buffer.write(ofmt["fname"].format(fname=processFileName(file["name"])).encode())
-							sys.stdout.buffer.write(b"\n")
-						printedName=True
-						totalFiles+=1
-
-					if not parsedArgs.dont_print_matches:
-						if parsedArgs.weave_matches:
-							runData["file"]["matches"][-1].append(match)
-						else:
-							printMatch(match, regexIndex)
-
-				# Handle --no-duplicates
-				if parsedArgs.no_duplicates:
-					matchedStrings.append(match[0])
+				#match=JSObj({
+				#	0     : match[0],
+				#	"span": match.span
+				#})
 
 				# Handle --match-limit, --dir-match-limit, and --total-match-limit
 				if (_FML!=0 and matchIndex>=_FML) or\
