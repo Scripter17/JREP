@@ -9,16 +9,17 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, itertools,
 """
 
 def parseLCName(name):
-	print(name)
 	def genOpts(*opts):
 		return "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
 	r=genOpts(r"file"         , r"dir"            , r"total")     +r"[-_]?"+\
 	  genOpts(r"match(?:e?s)?", r"files?"         , r"dirs?")     +r"[-_]?"+\
 	  genOpts(r"failures?"    , r"pass(?:e?[sd])?"          )+r"?"+r"[-_]?"+\
-	  genOpts(r"percents?"                                  )+r"?"+r"[-_]?"+\
+	  genOpts(r"counts?"      , r"percents?"                )+r"?"+r"[-_]?"+\
 	  genOpts(r"regex"        , r"total"                    )+r"?"
 	m=re.match(r, name)
-	return m and "".join(filter(lambda x:x, m.groups()[:-1])).lower()+(m.groups()[-1] or "t")
+	if m:
+		return "".join(filter(lambda x:x, m.groups())).lower()
+	return name
 
 class LimitAction(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string):
@@ -49,6 +50,7 @@ class CountAction(argparse.Action):
 		print(values)"""
 		for value in values:
 			ret.append(parseLCName(value))
+		print(ret)
 		setattr(namespace, self.dest, ret)
 
 class MatchRegexAction(argparse.Action):
@@ -221,7 +223,7 @@ else:
 	glob._iterdir=_iterdirBreadthFirst
 
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
-	print("Error: Length of --replace must be either 1 or equal to the number of regexes", file=sys.stderr)
+	warn("Error: Length of --replace must be either 1 or equal to the number of regexes", file=sys.stderr)
 	exit(1)
 
 # Simple implementation of --escape
@@ -287,15 +289,15 @@ def handleCount(rules, runData):
 		for key in ["df", "dm"]:
 			handleReg(key)
 			handleTot(key)
-		
+
 		if "dffc" in parsedArgs.count:
 			print(ofmt["dffc"].format(count=  runData["dir"]["failedFiles"]))
 		if "dffp" in parsedArgs.count:
-			print(ofmt["dffp"].format(percent=runData["dir"]["failedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
+			print(ofmt["dffp"].format(percent=runData["dir"]["failedFiles"]/(runData["dir"]["totalFiles"])))
 		if "dfpc" in parsedArgs.count:
 			print(ofmt["dfpc"].format(count=  runData["dir"]["passedFiles"]))
 		if "dfpp" in parsedArgs.count:
-			print(ofmt["dfpp"].format(percent=runData["dir"]["passedFiles"]/(runData["dir"]["passedFiles"]+runData["dir"]["failedFiles"])))
+			print(ofmt["dfpp"].format(percent=runData["dir"]["passedFiles"]/(runData["dir"]["totalFiles"])))
 
 	if "total" in rules:
 		for key in ["td", "tf", "tm"]:
@@ -374,7 +376,7 @@ def fileContentsDontMatter():
 	       and not {"fm", "dm", "tm"}.intersection(parsedArgs.limit.keys())\
 	       and not {"fm", "dm", "tm"}.intersection(parsedArgs.count)
 
-def fileNameFailesNameRegexes(fileName):
+def fileNameFailsNameRegexes(fileName):
 	return not all(map(lambda x:re.search(x,                  fileName ), parsedArgs.name_regex          )) or\
 	       not all(map(lambda x:re.search(x, os.path.realpath(fileName)), parsedArgs.full_name_regex     )) or\
 	           any(map(lambda x:re.search(x,                  fileName ), parsedArgs.name_anti_regex     )) or\
@@ -421,7 +423,7 @@ def getFiles():
 		verbose(f"Pre-processing \"{file}\"")
 
 		if os.path.isfile(file):
-			if fileContentsDontMatter() or fileNameFailesNameRegexes(file):
+			if fileContentsDontMatter() or fileNameFailsNameRegexes(file):
 				# Does the file content matter? No? Ignore it then
 				verbose("Optimizing away actually opening the file")
 				yield {"name": file, "data": b"", "isDir": False, "stdin": False}
@@ -584,19 +586,13 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	   any(map(lambda x:re.search(x, os.path.realpath(file["name"])), parsedArgs.full_name_ignore_regex)):
 	   verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name ignore regexes")
 	   continue
-	if fileNameFailesNameRegexes(file["name"]):
-		# Really should make how this works configurable
-		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
-		runData["dir"  ]["failedFiles"]+=1
-		runData["total"]["failedFiles"]+=1
-		continue
 
 	# --file-limit, --dir-match-limit, --dir-file-count, and --dir-match-count
 	lastDir=fileDir
 	fileDir=os.path.dirname(file["name"])
 
 	# --dir-match-count and --dir-file-count
-	if lastDir!=None and lastDir!=fileDir:
+	if lastDir!=None and lastDir!=fileDir and runData["dir"]["totalMatches"]:
 		handleCount(rules=["newDir"], runData=runData)
 
 	# --limit td
@@ -615,6 +611,13 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		runData["dir"]["totalMatches"   ]=0
 		runData["dir"]["failedFiles"]=0
 		runData["dir"]["passedFiles"]=0
+
+	if fileNameFailsNameRegexes(file["name"]):
+		# Really should make how this works configurable
+		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
+		runData["dir"  ]["failedFiles"]+=1
+		runData["total"]["failedFiles"]+=1
+		continue
 
 	# Handle --file-limit
 	# Really slow on big directories
@@ -719,7 +722,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		break
 
 # --dir-match-count and --dir-file count
-if fileDir!=None:
+if fileDir!=None and runData["dir"]["totalMatches"]:
 	handleCount(rules=["newDir"], runData=runData)
 
 # --total-match-count, --total-file-count, and --total-dir-count
