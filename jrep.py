@@ -268,17 +268,29 @@ ofmt={
 
 def handleCount(rules, runData):
 	categories={"t":"total", "d":"dir",  "f":"file"                }
-	counts    ={             "d":"dirs", "f":"files", "m":"matches"}
+	subCats   ={             "d":"dirs", "f":"files", "m":"matches"}
+	modes     ={"f":"failed", "p":"passed"}
 
 	def handleReg(key):
 		if key+"r" not in parsedArgs.count: return
-		category, count=categories[key[0]], counts[key[1]]+"PerRegex"
-		for regexIndex, count in enumerate(runData[category][count]):
-			print(ofmt[key+"r"].format(count=count, regexIndex=regexIndex))
+		category, subCat=categories[key[0]], subCats[key[1]]+"PerRegex"
+		for regexIndex, subCat in enumerate(runData[category][subCat]):
+			print(ofmt[key+"r"].format(count=subCat, regexIndex=regexIndex))
+
 	def handleTot(key):
 		if key+"t" not in parsedArgs.count: return
-		category, count=categories[key[0]], "total"+counts[key[1]].title()
-		print(ofmt[key+"t"].format(count=runData[category][count]))
+		category, subCat=categories[key[0]], "total"+subCats[key[1]].title()
+		print(ofmt[key+"t"].format(count=runData[category][subCat]))
+
+	def handleFiltered(key):
+		if key not in parsedArgs.count: return
+		category=categories[key[0]]
+		subCat   =subCats[key[1]]
+		mode    =modes[key[2]]
+		val=runData[category][mode+subCat.title()]
+		if key[3]=="p":
+			val/=runData[category]["total"+subCat.title()]
+		print(ofmt[key].format(count=val, percent=val))
 
 	if "file" in rules:
 		for key in ["fm"]:
@@ -290,14 +302,8 @@ def handleCount(rules, runData):
 			handleReg(key)
 			handleTot(key)
 
-		if "dffc" in parsedArgs.count:
-			print(ofmt["dffc"].format(count=  runData["dir"]["failedFiles"]))
-		if "dffp" in parsedArgs.count:
-			print(ofmt["dffp"].format(percent=runData["dir"]["failedFiles"]/(runData["dir"]["totalFiles"])))
-		if "dfpc" in parsedArgs.count:
-			print(ofmt["dfpc"].format(count=  runData["dir"]["passedFiles"]))
-		if "dfpp" in parsedArgs.count:
-			print(ofmt["dfpp"].format(percent=runData["dir"]["passedFiles"]/(runData["dir"]["totalFiles"])))
+		for key in ["dffc", "dffp", "dfpc", "dfpp"]:
+			handleFiltered(key)
 
 	if "total" in rules:
 		for key in ["td", "tf", "tm"]:
