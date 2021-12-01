@@ -76,9 +76,9 @@ _stdin.add_argument("--stdin-files"         , "-F", action="store_true"  , help=
 _stdin.add_argument("--stdin-globs"         , "-G", action="store_true"  , help="Treat STDIN as a list of globs")
 
 parser.add_argument("--name-regex"            , "-t", nargs="+", default=[], help="Regex to test relative file names for")
-parser.add_argument("--name-anti-regex"       ,       nargs="+", default=[], help="Like --name-regex but excludes file names that match")
+parser.add_argument("--name-anti-regex"       , "-T", nargs="+", default=[], help="Like --name-regex but excludes file names that match")
 parser.add_argument("--name-ignore-regex"     ,       nargs="+", default=[], help="Like --name-anti-regex but doesn't contribute to --count dir-failed-files")
-parser.add_argument("--full-name-regex"       , "-T", nargs="+", default=[], help="Regex to test absolute file names for")
+parser.add_argument("--full-name-regex"       ,       nargs="+", default=[], help="Regex to test absolute file names for")
 parser.add_argument("--full-name-anti-regex"  ,       nargs="+", default=[], help="Like --full-name-regex but excludes file names that match")
 parser.add_argument("--full-name-ignore-regex",       nargs="+", default=[], help="Like --full-name-anti-regex but doesn't contribute to --count dir-failed-files")
 
@@ -261,9 +261,13 @@ ofmt={
 
 	"dffc": ("Dir   file failed count  : "     *_header)+"{count}",
 	"dffp": ("Dir   file failed percent: "     *_header)+"{percent}",
-
 	"dfpc": ("Dir   file passed count  : "     *_header)+"{count}",
 	"dfpp": ("Dir   file passed percent: "     *_header)+"{percent}",
+
+	"tffc": ("Total file failed count  : "     *_header)+"{count}",
+	"tffp": ("Total file failed percent: "     *_header)+"{percent}",
+	"tfpc": ("Total file passed count  : "     *_header)+"{count}",
+	"tfpp": ("Total file passed percent: "     *_header)+"{percent}",
 }
 
 def handleCount(rules, runData):
@@ -289,7 +293,7 @@ def handleCount(rules, runData):
 		mode    =modes[key[2]]
 		val=runData[category][mode+subCat.title()]
 		if key[3]=="p":
-			val/=runData[category]["total"+subCat.title()]
+			val/=runData[category]["passed"+subCat.title()]+runData[category]["failed"+subCat.title()]
 		print(ofmt[key].format(count=val, percent=val))
 
 	if "file" in rules:
@@ -301,7 +305,6 @@ def handleCount(rules, runData):
 		for key in ["df", "dm"]:
 			handleReg(key)
 			handleTot(key)
-
 		for key in ["dffc", "dffp", "dfpc", "dfpp"]:
 			handleFiltered(key)
 
@@ -309,6 +312,8 @@ def handleCount(rules, runData):
 		for key in ["td", "tf", "tm"]:
 			handleReg(key)
 			handleTot(key)
+		for key in ["tffc", "tffp", "tfpc", "tfpp"]:
+			handleFiltered(key)
 
 class JSObj:
 	"""
