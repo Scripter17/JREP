@@ -1,28 +1,31 @@
 # JREP
 
-JREP is a work-in-process replacement/companion for the Linux command GREP designed to be cross-platform, feature rich, and very intuitive.
+JREP is a general-purpose command line utility that takes the basic concept of GREP and transforms it into an infinitely more versatile tool fit for the modern world  
 
-Basically I got annoyed at the lack of GREP for Windows and decided to do it myself.
-
-The current --help message:
+Until I can make a proper README, here's the output of `jrep --help`
 
 ```
 usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
                [--glob GLOB [GLOB ...]] [--stdin-files | --stdin-globs]
                [--name-regex NAME_REGEX [NAME_REGEX ...]]
-               [--full-name-regex FULL_NAME_REGEX [FULL_NAME_REGEX ...]]
                [--name-anti-regex NAME_ANTI_REGEX [NAME_ANTI_REGEX ...]]
+               [--name-ignore-regex NAME_IGNORE_REGEX [NAME_IGNORE_REGEX ...]]
+               [--full-name-regex FULL_NAME_REGEX [FULL_NAME_REGEX ...]]
                [--full-name-anti-regex FULL_NAME_ANTI_REGEX [FULL_NAME_ANTI_REGEX ...]]
+               [--full-name-ignore-regex FULL_NAME_IGNORE_REGEX [FULL_NAME_IGNORE_REGEX ...]]
                [--file-regex FILE_REGEX [FILE_REGEX ...]]
                [--file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]]
+               [--match-regex MATCH_REGEX [MATCH_REGEX ...]]
+               [--match-anti-regex MATCH_ANTI_REGEX [MATCH_ANTI_REGEX ...]]
                [--sort SORT] [--no-headers] [--print-directories]
                [--print-file-names] [--print-full-paths] [--print-posix-paths]
                [--dont-print-matches] [--print-match-offset]
                [--print-match-range] [--replace REPLACE [REPLACE ...]]
                [--sub SUB [SUB ...]] [--escape] [--count COUNT [COUNT ...]]
                [--limit LIMIT [LIMIT ...]] [--depth-first]
-               [--print-whole-lines] [--print-non-matching-files] [--no-warn]
-               [--weave-matches] [--strict-weave] [--verbose]
+               [--glob-root-dir GLOB_ROOT_DIR] [--match-whole-lines]
+               [--print-non-matching-files] [--no-warn] [--weave-matches]
+               [--strict-weave] [--order ORDER [ORDER ...]] [--verbose]
                [regex ...]
 
 positional arguments:
@@ -40,17 +43,29 @@ options:
   --stdin-globs, -G     Treat STDIN as a list of globs
   --name-regex NAME_REGEX [NAME_REGEX ...], -t NAME_REGEX [NAME_REGEX ...]
                         Regex to test relative file names for
-  --full-name-regex FULL_NAME_REGEX [FULL_NAME_REGEX ...], -T FULL_NAME_REGEX [FULL_NAME_REGEX ...]
-                        Regex to test absolute file names for
   --name-anti-regex NAME_ANTI_REGEX [NAME_ANTI_REGEX ...]
                         Like --name-regex but excludes file names that match
+  --name-ignore-regex NAME_IGNORE_REGEX [NAME_IGNORE_REGEX ...]
+                        Like --name-anti-regex but doesn't contribute to
+                        --count dir-failed-files
+  --full-name-regex FULL_NAME_REGEX [FULL_NAME_REGEX ...], -T FULL_NAME_REGEX [FULL_NAME_REGEX ...]
+                        Regex to test absolute file names for
   --full-name-anti-regex FULL_NAME_ANTI_REGEX [FULL_NAME_ANTI_REGEX ...]
                         Like --full-name-regex but excludes file names that
                         match
+  --full-name-ignore-regex FULL_NAME_IGNORE_REGEX [FULL_NAME_IGNORE_REGEX ...]
+                        Like --full-name-anti-regex but doesn't contribute to
+                        --count dir-failed-files
   --file-regex FILE_REGEX [FILE_REGEX ...]
                         Regexes to test file contents for
   --file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]
                         Like --file-regex but excludes files that match
+  --match-regex MATCH_REGEX [MATCH_REGEX ...]
+                        Only output match if, adter --replace and --sub, it
+                        matches all of these regexes (unimplemented)
+  --match-anti-regex MATCH_ANTI_REGEX [MATCH_ANTI_REGEX ...]
+                        Only output match if, adter --replace and --sub, it
+                        doesn't fail any of these regexes (unimplemented)
   --sort SORT, -S SORT  Sort files by ctime, mtime, atime, name, or size.
                         Prefix key with "r" to reverse. A windows-esque
                         "blockwise" sort is also available (todo: document)
@@ -78,21 +93,21 @@ options:
                         and \n
   --count COUNT [COUNT ...], -c COUNT [COUNT ...]
                         Count match/file/dir per file, dir, and/or total (Ex:
-                        --count fm df)
+                        --count fm dir-files)
   --limit LIMIT [LIMIT ...], -l LIMIT [LIMIT ...]
                         Count match/file/dir per file, dir, and/or total (Ex:
-                        --limit fm=1 td=5)
+                        --limit filematch=1 total_dirs=5)
   --depth-first         Enter subdirectories before processing files
-  --print-whole-lines   Print whole lines like FINDSTR
+  --glob-root-dir GLOB_ROOT_DIR
+                        Root dir to run globs in
+  --match-whole-lines   Match whole lines like FINDSTR
   --print-non-matching-files
                         Print file names with no matches
   --no-warn             Don't print warning messages
   --weave-matches, -w   Weave regex matchdes
   --strict-weave, -W    Only print full match sets
+  --order ORDER [ORDER ...]
+                        The order in which modifications to matches are
+                        applied
   --verbose, -v         Verbose info
 ```
-
-Some example snippits:
-
-- `jrep -g *.py -NH --count df` - Count all `.py` files in a directory
-- `jrep -g */*.mp4 -Nd --limit df=5 --count df | jrep "Directory: (.+)\nDir file count: 5" -r \1 -H` - List all directories with 5 or more `.mp4` files
