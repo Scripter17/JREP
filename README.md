@@ -111,5 +111,5 @@ options:
                         The order in which modifications to matches are
                         applied
   --verbose, -v         Verbose info
-```
-<!--</HELP MSG>-->
+
+```<!--</HELP MSG>-->
