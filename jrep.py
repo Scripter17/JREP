@@ -50,7 +50,6 @@ class CountAction(argparse.Action):
 		print(values)"""
 		for value in values:
 			ret.append(parseLCName(value))
-		print(ret)
 		setattr(namespace, self.dest, ret)
 
 class MatchRegexAction(argparse.Action):
@@ -243,32 +242,32 @@ _mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 # Output fstrings to make later usage easier
 ofmt={
 	"dname": ("Directory: " *_header)+"{dname}",
-	"fname": ("File: " *_header)+"{fname}",
+	"fname": ("File: "      *_header)+"{fname}",
 	"match": ("Match (R{regexIndex})"*_header)+ _mRange ,
 
-	"fmr": ("File match count (R{regexIndex}): "*_header)+"{count}",
-	"dmr": ("Dir match count (R{regexIndex}): "*_header)+"{count}",
-	"dfr": ("Dir file count (R{regexIndex}): "*_header)+"{count}",
+	"fmr": ("File match count (R{regexIndex}): " *_header)+"{count}",
+	"dmr": ("Dir match count (R{regexIndex}): "  *_header)+"{count}",
+	"dfr": ("Dir file count (R{regexIndex}): "   *_header)+"{count}",
 	"tmr": ("Total match count (R{regexIndex}): "*_header)+"{count}",
-	"tfr": ("Total file count (R{regexIndex}): "*_header)+"{count}",
-	"tdr": ("Total dir count (R{regexIndex}): "*_header)+"{count}",
+	"tfr": ("Total file count (R{regexIndex}): " *_header)+"{count}",
+	"tdr": ("Total dir count (R{regexIndex}): "  *_header)+"{count}",
 
-	"fmt": ("File match count (Total): "*_header)+"{count}",
-	"dmt": ("Dir match count (Total): "*_header)+"{count}",
-	"dft": ("Dir file count (Total): "*_header)+"{count}",
+	"fmt": ("File match count (Total): " *_header)+"{count}",
+	"dmt": ("Dir match count (Total): "  *_header)+"{count}",
+	"dft": ("Dir file count (Total): "   *_header)+"{count}",
 	"tmt": ("Total match count (Total): "*_header)+"{count}",
-	"tft": ("Total file count (Total): "*_header)+"{count}",
-	"tdt": ("Total dir count (Total): "*_header)+"{count}",
+	"tft": ("Total file count (Total): " *_header)+"{count}",
+	"tdt": ("Total dir count (Total): "  *_header)+"{count}",
 
-	"dffc": ("Dir file failed count: "     *_header)+"{count}",
-	"dffp": ("Dir file failed percent: "     *_header)+"{percent:.05f}",
-	"dfpc": ("Dir file passed count: "     *_header)+"{count}",
-	"dfpp": ("Dir file passed percent: "     *_header)+"{percent:.05f}",
+	"dffc": ("Dir file failed count: "  *_header)+"{count}",
+	"dffp": ("Dir file failed percent: "*_header)+"{percent:.05f}",
+	"dfpc": ("Dir file passed count: "  *_header)+"{count}",
+	"dfpp": ("Dir file passed percent: "*_header)+"{percent:.05f}",
 
-	"tffc": ("Total file failed count: "     *_header)+"{count}",
-	"tffp": ("Total file failed percent: "     *_header)+"{percent:.05f}",
-	"tfpc": ("Total file passed count: "     *_header)+"{count}",
-	"tfpp": ("Total file passed percent: "     *_header)+"{percent:.05f}",
+	"tffc": ("Total file failed count: "  *_header)+"{count}",
+	"tffp": ("Total file failed percent: "*_header)+"{percent:.05f}",
+	"tfpc": ("Total file passed count: "  *_header)+"{count}",
+	"tfpp": ("Total file passed percent: "*_header)+"{percent:.05f}",
 }
 
 def handleCount(rules, runData):
@@ -632,7 +631,10 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		runData["dir"]["failedFiles"]=0
 		runData["dir"]["passedFiles"]=0
 
-	if fileNameFailsNameRegexes(file["name"]):
+	# Handle name and file regexes
+	_fileRegexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
+	if fileNameFailsNameRegexes(file["name"]) or\
+	   any(map(_fileRegexCheck, parsedArgs.file_anti_regex)) or not all(map(_fileRegexCheck, parsedArgs.file_regex)):
 		# Really should make how this works configurable
 		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
 		runData["dir"  ]["failedFiles"]+=1
@@ -644,11 +646,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	if (_DFL!=0 and runData["dir"]["totalFiles"]==_DFL) or (_DML!=0 and runData["dir"]["totalMatches"]>=_DML):
 		continue
 
-	runData["dir"  ]["passedFiles"]+=1
-	runData["total"]["passedFiles"]+=1
-	runData["total"]["totalFiles"]+=1
-	runData["dir"  ]["totalFiles"]+=1
-
 	# Main matching stuff
 	_continue=False # PEP-3136 would've come in clutch here
 	matchIndex=0 # Just makes --XYZ-match-count stuff and --print-non-matching-files easier
@@ -659,13 +656,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			runData["file"]["matches"].append([])
 
 		try:
-			# Handle --file-regex and --file-anti-regex
-			_fileRegexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
-			if any(map(_fileRegexCheck, parsedArgs.file_anti_regex)) or not all(map(_fileRegexCheck, parsedArgs.file_regex)):
-				# Move to the next file
-				_continue=True
-				break
-
 			# Turn regex into bytes
 			regex=regex.encode(errors="ignore")
 
@@ -683,6 +673,11 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					runData["dir"  ]["filesPerRegex"  ][regexIndex]+=1
 					if lastDir!=fileDir:
 						runData["total"]["dirsPerRegex"   ][regexIndex]+=1
+					if regexIndex==0:
+						runData["dir"  ]["passedFiles"]+=1
+						runData["total"]["passedFiles"]+=1
+						runData["total"]["totalFiles"]+=1
+						runData["dir"  ]["totalFiles"]+=1
 				runData["total"]["matchesPerRegex"][regexIndex]+=1
 				runData["dir"  ]["matchesPerRegex"][regexIndex]+=1
 				runData["file" ]["matchesPerRegex"][regexIndex]+=1
