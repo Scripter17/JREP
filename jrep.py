@@ -479,6 +479,7 @@ def printMatch(match, regexIndex):
 	sys.stdout.buffer.write(ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
 	sys.stdout.buffer.write(match[0])
 	sys.stdout.buffer.write(b"\n")
+	sys.stdout.buffer.flush()
 
 # Abbreviations to make my editor not show a horizontal scrollbar (my version of PEP8)
 _FML=parsedArgs.limit["fm"] if "fm" in parsedArgs.limit else 0
@@ -563,6 +564,7 @@ def funcPrintMatches(parsedArgs, file, printedName, regexIndex, **kwargs):
 			if parsedArgs.print_file_names:
 				sys.stdout.buffer.write(ofmt["fname"].format(fname=processFileName(file["name"])).encode())
 				sys.stdout.buffer.write(b"\n")
+				sys.stdout.buffer.flush()
 
 		if not parsedArgs.dont_print_matches:
 			if parsedArgs.weave_matches:
