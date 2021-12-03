@@ -5,7 +5,8 @@ JREP is a general-purpose command line utility that takes the basic concept of G
 Until I can make a proper README, here's the output of `jrep --help`
 
 <!--<HELP MSG>-->
-```\nusage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
+```
+usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
                [--glob GLOB [GLOB ...]] [--stdin-files | --stdin-globs]
                [--name-regex NAME_REGEX [NAME_REGEX ...]]
                [--name-anti-regex NAME_ANTI_REGEX [NAME_ANTI_REGEX ...]]
@@ -110,4 +111,5 @@ options:
                         The order in which modifications to matches are
                         applied
   --verbose, -v         Verbose info
-\n```\n<!--</HELP MSG>-->
+```
+<!--</HELP MSG>-->
