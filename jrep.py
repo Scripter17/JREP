@@ -89,6 +89,7 @@ parser.add_argument("--match-regex"         ,       nargs="+", default=[], actio
 parser.add_argument("--match-anti-regex"    ,       nargs="+", default=[], action=MatchRegexAction, help="Only output match if, adter --replace and --sub, it doesn't fail any of these regexes (unimplemented)")
 
 parser.add_argument("--sort"                , "-S",                        help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available (todo: document)")
+#parser.add_argument("--sort-regex"         ,       nargs="+", default=[], help="Regexes to apply to file names keys (like --replace) for purposes of sorting")
 parser.add_argument("--no-headers"          , "-H", action="store_true"  , help="Don't print match: or file: before lines")
 parser.add_argument("--print-directories"   , "-d", action="store_true"  , help="Print names of explored directories")
 parser.add_argument("--print-file-names"    , "-n", action="store_true"  , help="Print file names as well as matches")
@@ -103,7 +104,7 @@ parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help=
 parser.add_argument("--escape"              , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
 parser.add_argument("--count"               , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
-parser.add_argument("--limit"               , "-l", nargs="+", default={}, action=LimitAction, help="Count match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
+parser.add_argument("--limit"               , "-l", nargs="+", default={}, action=LimitAction, help="Limit match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
 
 parser.add_argument("--depth-first"         ,       action="store_true"  , help="Enter subdirectories before processing files")
 parser.add_argument("--glob-root-dir"       ,                              help="Root dir to run globs in")
@@ -241,33 +242,33 @@ _mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 
 # Output fstrings to make later usage easier
 ofmt={
-	"dname": ("Directory                : " *_header)+"{dname}",
-	"fname": ("File                     : " *_header)+"{fname}",
+	"dname": ("Directory: " *_header)+"{dname}",
+	"fname": ("File: " *_header)+"{fname}",
 	"match": ("Match (R{regexIndex})"*_header)+ _mRange ,
 
-	"fmr": ("File  match count (R{regexIndex})   : "*_header)+"{count}",
-	"dmr": ("Dir   match count (R{regexIndex})   : "*_header)+"{count}",
-	"dfr": ("Dir   file count  (R{regexIndex})   : "*_header)+"{count}",
-	"tmr": ("Total match count (R{regexIndex})   : "*_header)+"{count}",
-	"tfr": ("Total file count  (R{regexIndex})   : "*_header)+"{count}",
-	"tdr": ("Total dir count   (R{regexIndex})   : "*_header)+"{count}",
+	"fmr": ("File match count (R{regexIndex}): "*_header)+"{count}",
+	"dmr": ("Dir match count (R{regexIndex}): "*_header)+"{count}",
+	"dfr": ("Dir file count (R{regexIndex}): "*_header)+"{count}",
+	"tmr": ("Total match count (R{regexIndex}): "*_header)+"{count}",
+	"tfr": ("Total file count (R{regexIndex}): "*_header)+"{count}",
+	"tdr": ("Total dir count (R{regexIndex}): "*_header)+"{count}",
 
-	"fmt": ("File  match count (Total): "*_header)+"{count}",
-	"dmt": ("Dir   match count (Total): "*_header)+"{count}",
-	"dft": ("Dir   file count  (Total): "*_header)+"{count}",
+	"fmt": ("File match count (Total): "*_header)+"{count}",
+	"dmt": ("Dir match count (Total): "*_header)+"{count}",
+	"dft": ("Dir file count (Total): "*_header)+"{count}",
 	"tmt": ("Total match count (Total): "*_header)+"{count}",
-	"tft": ("Total file count  (Total): "*_header)+"{count}",
-	"tdt": ("Total dir count   (Total): "*_header)+"{count}",
+	"tft": ("Total file count (Total): "*_header)+"{count}",
+	"tdt": ("Total dir count (Total): "*_header)+"{count}",
 
-	"dffc": ("Dir   file failed count  : "     *_header)+"{count}",
-	"dffp": ("Dir   file failed percent: "     *_header)+"{percent}",
-	"dfpc": ("Dir   file passed count  : "     *_header)+"{count}",
-	"dfpp": ("Dir   file passed percent: "     *_header)+"{percent}",
+	"dffc": ("Dir file failed count: "     *_header)+"{count}",
+	"dffp": ("Dir file failed percent: "     *_header)+"{percent:.05f}",
+	"dfpc": ("Dir file passed count: "     *_header)+"{count}",
+	"dfpp": ("Dir file passed percent: "     *_header)+"{percent:.05f}",
 
-	"tffc": ("Total file failed count  : "     *_header)+"{count}",
-	"tffp": ("Total file failed percent: "     *_header)+"{percent}",
-	"tfpc": ("Total file passed count  : "     *_header)+"{count}",
-	"tfpp": ("Total file passed percent: "     *_header)+"{percent}",
+	"tffc": ("Total file failed count: "     *_header)+"{count}",
+	"tffp": ("Total file failed percent: "     *_header)+"{percent:.05f}",
+	"tfpc": ("Total file passed count: "     *_header)+"{count}",
+	"tfpp": ("Total file passed percent: "     *_header)+"{percent:.05f}",
 }
 
 def handleCount(rules, runData):
@@ -305,14 +306,14 @@ def handleCount(rules, runData):
 		for key in ["df", "dm"]:
 			handleReg(key)
 			handleTot(key)
-		for key in ["dffc", "dffp", "dfpc", "dfpp"]:
+		for key in ["dfpc", "dfpp", "dffc", "dffp"]:
 			handleFiltered(key)
 
 	if "total" in rules:
 		for key in ["td", "tf", "tm"]:
 			handleReg(key)
 			handleTot(key)
-		for key in ["tffc", "tffp", "tfpc", "tfpp"]:
+		for key in ["tfpc", "tfpp", "tffc", "tffp"]:
 			handleFiltered(key)
 
 class JSObj:
@@ -377,6 +378,12 @@ def sortFiles(files, key=None):
 	for sort in list(sorts.keys()):
 		# Scopes suck
 		sorts["r"+sort]=(lambda _sort:lambda x:-sorts[_sort](x))(sort)
+
+	#if key in ["name", "blockwise", "rname", "rblockwise"] and parsedArgs.sort_regex:
+	#	for pattern, replace in zip(parsedArgs.sort_regex[0::2], parsedArgs.sort_regex[1::2]):
+	#		files=map(lambda x: {"orig":x, "name":re.sub(pattern, replace, x["name"])}, files)
+
+	#return map(lambda x:x["orig"] if "orig" in x else x, sorted(files, key=sorts[key]))
 
 	return sorted(files, key=sorts[key])
 
