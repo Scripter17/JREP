@@ -5,4 +5,5 @@ JREP is a general-purpose command line utility that takes the basic concept of G
 Until I can make a proper README, here's the output of `jrep --help`
 
 <!--<HELP MSG>-->
+  s
 <!--</HELP MSG>-->
