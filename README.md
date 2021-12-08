@@ -14,6 +14,10 @@ usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
                [--full-name-regex FULL_NAME_REGEX [FULL_NAME_REGEX ...]]
                [--full-name-anti-regex FULL_NAME_ANTI_REGEX [FULL_NAME_ANTI_REGEX ...]]
                [--full-name-ignore-regex FULL_NAME_IGNORE_REGEX [FULL_NAME_IGNORE_REGEX ...]]
+               [--dir-name-regex DIR_NAME_REGEX [DIR_NAME_REGEX ...]]
+               [--dir-name-anti-regex DIR_NAME_ANTI_REGEX [DIR_NAME_ANTI_REGEX ...]]
+               [--full-dir-name-regex FULL_DIR_NAME_REGEX [FULL_DIR_NAME_REGEX ...]]
+               [--full-dir-name-anti-regex FULL_DIR_NAME_ANTI_REGEX [FULL_DIR_NAME_ANTI_REGEX ...]]
                [--file-regex FILE_REGEX [FILE_REGEX ...]]
                [--file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]]
                [--match-regex MATCH_REGEX [MATCH_REGEX ...]]
@@ -57,6 +61,18 @@ options:
   --full-name-ignore-regex FULL_NAME_IGNORE_REGEX [FULL_NAME_IGNORE_REGEX ...]
                         Like --full-name-anti-regex but doesn't contribute to
                         --count dir-failed-files
+  --dir-name-regex DIR_NAME_REGEX [DIR_NAME_REGEX ...]
+                        --name-regex but globs don't enter dirs whose name
+                        doesn't pass all of the regexes
+  --dir-name-anti-regex DIR_NAME_ANTI_REGEX [DIR_NAME_ANTI_REGEX ...]
+                        --name-anti-regex but globs don't enter dirs whose
+                        name passes any of the regexes
+  --full-dir-name-regex FULL_DIR_NAME_REGEX [FULL_DIR_NAME_REGEX ...]
+                        --full-name-regex but globs don't enter dirs whose
+                        name doesn't pass all of the regexes
+  --full-dir-name-anti-regex FULL_DIR_NAME_ANTI_REGEX [FULL_DIR_NAME_ANTI_REGEX ...]
+                        --full-name-anti-regex but globs don't enter dirs
+                        whose name passes any of the regexes
   --file-regex FILE_REGEX [FILE_REGEX ...]
                         Regexes to test file contents for
   --file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]

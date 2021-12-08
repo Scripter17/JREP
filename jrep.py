@@ -81,6 +81,11 @@ parser.add_argument("--full-name-regex"       ,       nargs="+", default=[], hel
 parser.add_argument("--full-name-anti-regex"  ,       nargs="+", default=[], help="Like --full-name-regex but excludes file names that match")
 parser.add_argument("--full-name-ignore-regex",       nargs="+", default=[], help="Like --full-name-anti-regex but doesn't contribute to --count dir-failed-files")
 
+parser.add_argument("--dir-name-regex"          ,       nargs="+", default=[], help="--name-regex but globs don't enter dirs whose name doesn't pass all of the regexes")
+parser.add_argument("--dir-name-anti-regex"     ,       nargs="+", default=[], help="--name-anti-regex but globs don't enter dirs whose name passes any of the regexes")
+parser.add_argument("--full-dir-name-regex"     ,       nargs="+", default=[], help="--full-name-regex but globs don't enter dirs whose name doesn't pass all of the regexes")
+parser.add_argument("--full-dir-name-anti-regex",       nargs="+", default=[], help="--full-name-anti-regex but globs don't enter dirs whose name passes any of the regexes")
+
 parser.add_argument("--file-regex"          ,       nargs="+", default=[], help="Regexes to test file contents for")
 parser.add_argument("--file-anti-regex"     ,       nargs="+", default=[], help="Like --file-regex but excludes files that match")
 
@@ -131,10 +136,11 @@ def warn(x):
 verbose("JREP preview version")
 verbose(parsedArgs)
 
-def _iterdirBreadthFirst(dirname, dir_fd, dironly):
+def _iterdir(dirname, dir_fd, dironly):
 	try:
 		fd = None
 		fsencode = None
+		files=[]
 		directories=[]
 		if dir_fd is not None:
 			if dirname:
@@ -155,72 +161,27 @@ def _iterdirBreadthFirst(dirname, dir_fd, dironly):
 					try:
 						if not dironly or entry.is_dir():
 							if entry.is_dir():
-								directories.append(entry)
+								if     all(map(lambda x:re.search(x,                  entry.name ), parsedArgs.dir_name_regex          )) and\
+								       all(map(lambda x:re.search(x, os.path.realpath(entry.name)), parsedArgs.full_dir_name_regex     )) and\
+								   not any(map(lambda x:re.search(x,                  entry.name ), parsedArgs.dir_name_anti_regex     )) and\
+								   not any(map(lambda x:re.search(x, os.path.realpath(entry.name)), parsedArgs.full_dir_name_anti_regex)):
+									directories.append(entry.name)
 							else:
 								if fsencode is not None:
-									yield fsencode(entry.name)
+									files.append(fsencode(entry.name))
 								else:
-									yield entry.name
+									files.append(entry.name)
 					except OSError:
 						pass
-				for directory in directories:
-					if fsencode is not None:
-						yield fsencode(directory.name)
-					else:
-						yield directory.name
+				for items in [directories, files] if parsedArgs.depth_first else [files, directories]:
+					yield from items
 		finally:
 			if fd is not None:
 				os.close(fd)
 	except OSError:
 		return
 
-def _iterdirDepthFirst(dirname, dir_fd, dironly):
-	try:
-		fd = None
-		fsencode = None
-		files=[]
-		if dir_fd is not None:
-			if dirname:
-				fd = arg = os.open(dirname, _dir_open_flags, dir_fd=dir_fd)
-			else:
-				arg = dir_fd
-			if isinstance(dirname, bytes):
-				fsencode = os.fsencode
-		elif dirname:
-			arg = dirname
-		elif isinstance(dirname, bytes):
-			arg = bytes(os.curdir, 'ASCII')
-		else:
-			arg = os.curdir
-		try:
-			with os.scandir(arg) as it:
-				for entry in it:
-					try:
-						if not dironly or entry.is_dir():
-							if not entry.is_dir():
-								files.append(entry)
-							else:
-								if fsencode is not None:
-									yield fsencode(entry.name)
-								else:
-									yield entry.name
-					except OSError:
-						pass
-				for file in files:
-					if fsencode is not None:
-						yield fsencode(file.name)
-					else:
-						yield file.name
-		finally:
-			if fd is not None:
-				os.close(fd)
-	except OSError:
-		return
-
-if parsedArgs.depth_first:
-	glob._iterdir=_iterdirDepthFirst
-else:
-	glob._iterdir=_iterdirBreadthFirst
+glob._iterdir=_iterdir
 
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
 	warn("Error: Length of --replace must be either 1 or equal to the number of regexes", file=sys.stderr)
@@ -510,7 +471,7 @@ def delayedSub(repl, match):
 	for x in parsedTemplate[0]:
 		parsedTemplate[1][x[0]]=match[x[1]]
 	return JSObj({
-		"span":match.span,
+		**match,
 		0:type(parsedTemplate[1][0])().join(parsedTemplate[1])
 	})
 
@@ -687,8 +648,10 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 				match=JSObj({
 					0:match[0],
+					**dict(enumerate(match.groups(), start=1)),
 					"groups":match.groups,
-					"span":match.span
+					"span":match.span,
+					"re":match.re
 				})
 
 				try:
