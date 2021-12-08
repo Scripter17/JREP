@@ -47,14 +47,16 @@ options:
   --stdin-files, -F     Treat STDIN as a list of files
   --stdin-globs, -G     Treat STDIN as a list of globs
   --name-regex NAME_REGEX [NAME_REGEX ...], -t NAME_REGEX [NAME_REGEX ...]
-                        Regex to test relative file names for
+                        If a file name matches all supplied regexes, keep
+                        going. Otherwise continue
   --name-anti-regex NAME_ANTI_REGEX [NAME_ANTI_REGEX ...], -T NAME_ANTI_REGEX [NAME_ANTI_REGEX ...]
                         Like --name-regex but excludes file names that match
   --name-ignore-regex NAME_IGNORE_REGEX [NAME_IGNORE_REGEX ...]
                         Like --name-anti-regex but doesn't contribute to
                         --count dir-failed-files
   --full-name-regex FULL_NAME_REGEX [FULL_NAME_REGEX ...]
-                        Regex to test absolute file names for
+                        Like --name-regex but for absolute file paths (C:/xyz
+                        instead of xyz)
   --full-name-anti-regex FULL_NAME_ANTI_REGEX [FULL_NAME_ANTI_REGEX ...]
                         Like --full-name-regex but excludes file names that
                         match
@@ -62,28 +64,29 @@ options:
                         Like --full-name-anti-regex but doesn't contribute to
                         --count dir-failed-files
   --dir-name-regex DIR_NAME_REGEX [DIR_NAME_REGEX ...]
-                        --name-regex but globs don't enter dirs whose name
-                        doesn't pass all of the regexes
+                        If a directory name matches all supplied regexes,
+                        enter it. Otherwise continue
   --dir-name-anti-regex DIR_NAME_ANTI_REGEX [DIR_NAME_ANTI_REGEX ...]
-                        --name-anti-regex but globs don't enter dirs whose
-                        name passes any of the regexes
+                        --dir-name-regex but ignore directories that match any
+                        of the supplies regexes
   --full-dir-name-regex FULL_DIR_NAME_REGEX [FULL_DIR_NAME_REGEX ...]
-                        --full-name-regex but globs don't enter dirs whose
-                        name doesn't pass all of the regexes
+                        --dir-name-regex but applied to full directory paths
   --full-dir-name-anti-regex FULL_DIR_NAME_ANTI_REGEX [FULL_DIR_NAME_ANTI_REGEX ...]
-                        --full-name-anti-regex but globs don't enter dirs
-                        whose name passes any of the regexes
+                        --dir-name-anti-regex but applied to full directory
+                        paths
   --file-regex FILE_REGEX [FILE_REGEX ...]
                         Regexes to test file contents for
   --file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]
                         Like --file-regex but excludes files that match
   --match-regex MATCH_REGEX [MATCH_REGEX ...]
-                        Only continue with a match if it matches all of these
-                        regexes that apply to the match's regex index. The *
-                        in "jrep a b --match-regex c * d" makes the second
-                        match regex (d) apply to the second get regex (b)
+                        Basically applies str.split("*") to the list of
+                        --match-regex. If a match matches all regexes in the
+                        Nth --match-regex group (where N is the index of the
+                        current get regex) continue processing the match,
+                        otherwise move on to the next one
   --match-anti-regex MATCH_ANTI_REGEX [MATCH_ANTI_REGEX ...]
-                        Like --match-regex but excludes matches that match
+                        --match-regex but excludes matches that match any of
+                        the supplies regexes
   --sort SORT, -S SORT  Sort files by ctime, mtime, atime, name, or size.
                         Prefix key with "r" to reverse. A windows-esque
                         "blockwise" sort is also available (todo: document)

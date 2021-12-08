@@ -77,65 +77,65 @@ class MatchRegexAction(argparse.Action):
 		setattr(namespace, self.dest, ret)
 
 parser=argparse.ArgumentParser()
-parser.add_argument("regex"                 ,       nargs="*", default=[""], help="Regex(es) to process matches for")
-parser.add_argument("--string"              , "-s", action="store_true"    , help="Test for strings instead of regex")
-parser.add_argument("--no-duplicates"       , "-D", action="store_true"    , help="Don't print duplicate matches")
+parser.add_argument("regex"                     ,       nargs="*", default=[""], help="Regex(es) to process matches for")
+parser.add_argument("--string"                  , "-s", action="store_true"    , help="Test for strings instead of regex")
+parser.add_argument("--no-duplicates"           , "-D", action="store_true"    , help="Don't print duplicate matches")
 
-parser.add_argument("--file"                , "-f", nargs="+", default=[], help="The file(s) to check")
-parser.add_argument("--glob"                , "-g", nargs="+", default=[], help="The glob(s) to check")
+parser.add_argument("--file"                    , "-f", nargs="+", default=[], help="The file(s) to check")
+parser.add_argument("--glob"                    , "-g", nargs="+", default=[], help="The glob(s) to check")
 
 _stdin=parser.add_mutually_exclusive_group()
-_stdin.add_argument("--stdin-files"         , "-F", action="store_true"  , help="Treat STDIN as a list of files")
-_stdin.add_argument("--stdin-globs"         , "-G", action="store_true"  , help="Treat STDIN as a list of globs")
+_stdin.add_argument("--stdin-files"             , "-F", action="store_true"  , help="Treat STDIN as a list of files")
+_stdin.add_argument("--stdin-globs"             , "-G", action="store_true"  , help="Treat STDIN as a list of globs")
 
-parser.add_argument("--name-regex"            , "-t", nargs="+", default=[], help="Regex to test relative file names for")
-parser.add_argument("--name-anti-regex"       , "-T", nargs="+", default=[], help="Like --name-regex but excludes file names that match")
-parser.add_argument("--name-ignore-regex"     ,       nargs="+", default=[], help="Like --name-anti-regex but doesn't contribute to --count dir-failed-files")
-parser.add_argument("--full-name-regex"       ,       nargs="+", default=[], help="Regex to test absolute file names for")
-parser.add_argument("--full-name-anti-regex"  ,       nargs="+", default=[], help="Like --full-name-regex but excludes file names that match")
-parser.add_argument("--full-name-ignore-regex",       nargs="+", default=[], help="Like --full-name-anti-regex but doesn't contribute to --count dir-failed-files")
+parser.add_argument("--name-regex"              , "-t", nargs="+", default=[], help="If a file name matches all supplied regexes, keep going. Otherwise continue")
+parser.add_argument("--name-anti-regex"         , "-T", nargs="+", default=[], help="Like --name-regex but excludes file names that match")
+parser.add_argument("--name-ignore-regex"       ,       nargs="+", default=[], help="Like --name-anti-regex but doesn't contribute to --count dir-failed-files")
+parser.add_argument("--full-name-regex"         ,       nargs="+", default=[], help="Like --name-regex but for absolute file paths (C:/xyz instead of xyz)")
+parser.add_argument("--full-name-anti-regex"    ,       nargs="+", default=[], help="Like --full-name-regex but excludes file names that match")
+parser.add_argument("--full-name-ignore-regex"  ,       nargs="+", default=[], help="Like --full-name-anti-regex but doesn't contribute to --count dir-failed-files")
 
-parser.add_argument("--dir-name-regex"          ,       nargs="+", default=[], help="--name-regex but globs don't enter dirs whose name doesn't pass all of the regexes")
-parser.add_argument("--dir-name-anti-regex"     ,       nargs="+", default=[], help="--name-anti-regex but globs don't enter dirs whose name passes any of the regexes")
-parser.add_argument("--full-dir-name-regex"     ,       nargs="+", default=[], help="--full-name-regex but globs don't enter dirs whose name doesn't pass all of the regexes")
-parser.add_argument("--full-dir-name-anti-regex",       nargs="+", default=[], help="--full-name-anti-regex but globs don't enter dirs whose name passes any of the regexes")
+parser.add_argument("--dir-name-regex"          ,       nargs="+", default=[], help="If a directory name matches all supplied regexes, enter it. Otherwise continue")
+parser.add_argument("--dir-name-anti-regex"     ,       nargs="+", default=[], help="--dir-name-regex but ignore directories that match any of the supplies regexes")
+parser.add_argument("--full-dir-name-regex"     ,       nargs="+", default=[], help="--dir-name-regex but applied to full directory paths")
+parser.add_argument("--full-dir-name-anti-regex",       nargs="+", default=[], help="--dir-name-anti-regex but applied to full directory paths")
 
-parser.add_argument("--file-regex"          ,       nargs="+", default=[], help="Regexes to test file contents for")
-parser.add_argument("--file-anti-regex"     ,       nargs="+", default=[], help="Like --file-regex but excludes files that match")
+parser.add_argument("--file-regex"              ,       nargs="+", default=[], help="Regexes to test file contents for")
+parser.add_argument("--file-anti-regex"         ,       nargs="+", default=[], help="Like --file-regex but excludes files that match")
 
-parser.add_argument("--match-regex"         ,       nargs="+", default=[], action=MatchRegexAction, help="Only continue with a match if it matches all of these regexes that apply to the match's regex index. The * in \"jrep a b --match-regex c * d\" makes the second match regex (d) apply to the second get regex (b)")
-parser.add_argument("--match-anti-regex"    ,       nargs="+", default=[], action=MatchRegexAction, help="Like --match-regex but excludes matches that match")
+parser.add_argument("--match-regex"             ,       nargs="+", default=[], action=MatchRegexAction, help="Basically applies str.split(\"*\") to the list of --match-regex. If a match matches all regexes in the Nth --match-regex group (where N is the index of the current get regex) continue processing the match, otherwise move on to the next one")
+parser.add_argument("--match-anti-regex"        ,       nargs="+", default=[], action=MatchRegexAction, help="--match-regex but excludes matches that match any of the supplies regexes")
 
-parser.add_argument("--sort"                , "-S",                        help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available (todo: document)")
-#parser.add_argument("--sort-regex"         ,       nargs="+", default=[], help="Regexes to apply to file names keys (like --replace) for purposes of sorting")
-parser.add_argument("--no-headers"          , "-H", action="store_true"  , help="Don't print match: or file: before lines")
-parser.add_argument("--print-directories"   , "-d", action="store_true"  , help="Print names of explored directories")
-parser.add_argument("--print-file-names"    , "-n", action="store_true"  , help="Print file names as well as matches")
-parser.add_argument("--print-full-paths"    , "-p", action="store_true"  , help="Print full file paths")
-parser.add_argument("--print-posix-paths"   , "-P", action="store_true"  , help="Print replace \\ with / in file paths")
-parser.add_argument("--dont-print-matches"  , "-N", action="store_true"  , help="Don't print matches (use with --print-file-names to only print names)")
-parser.add_argument("--print-match-offset"  , "-o", action="store_true"  , help="Print the match offset (ignores -H)")
-parser.add_argument("--print-match-range"   , "-O", action="store_true"  , help="Print the match range  (implies -o)")
+parser.add_argument("--sort"                    , "-S",                        help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available (todo: document)")
+#parser.add_argument("--sort-regex"             ,       nargs="+", default=[], help="Regexes to apply to file names keys (like --replace) for purposes of sorting")
+parser.add_argument("--no-headers"              , "-H", action="store_true"  , help="Don't print match: or file: before lines")
+parser.add_argument("--print-directories"       , "-d", action="store_true"  , help="Print names of explored directories")
+parser.add_argument("--print-file-names"        , "-n", action="store_true"  , help="Print file names as well as matches")
+parser.add_argument("--print-full-paths"        , "-p", action="store_true"  , help="Print full file paths")
+parser.add_argument("--print-posix-paths"       , "-P", action="store_true"  , help="Print replace \\ with / in file paths")
+parser.add_argument("--dont-print-matches"      , "-N", action="store_true"  , help="Don't print matches (use with --print-file-names to only print names)")
+parser.add_argument("--print-match-offset"      , "-o", action="store_true"  , help="Print the match offset (ignores -H)")
+parser.add_argument("--print-match-range"       , "-O", action="store_true"  , help="Print the match range  (implies -o)")
 
-parser.add_argument("--replace"             , "-r", nargs="+", default=[], help="Regex replacement")
-parser.add_argument("--sub"                 , "-R", nargs="+", default=[], help="re.sub argument pairs after --replace is applied")
-parser.add_argument("--escape"              , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
+parser.add_argument("--replace"                 , "-r", nargs="+", default=[], help="Regex replacement")
+parser.add_argument("--sub"                     , "-R", nargs="+", default=[], help="re.sub argument pairs after --replace is applied")
+parser.add_argument("--escape"                  , "-e", action="store_true"  , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
-parser.add_argument("--count"               , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
-parser.add_argument("--limit"               , "-l", nargs="+", default={}, action=LimitAction, help="Limit match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
+parser.add_argument("--count"                   , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
+parser.add_argument("--limit"                   , "-l", nargs="+", default={}, action=LimitAction, help="Limit match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
 
-parser.add_argument("--depth-first"         ,       action="store_true"  , help="Enter subdirectories before processing files")
-parser.add_argument("--glob-root-dir"       ,                              help="Root dir to run globs in")
+parser.add_argument("--depth-first"             ,       action="store_true"  , help="Enter subdirectories before processing files")
+parser.add_argument("--glob-root-dir"           ,                              help="Root dir to run globs in")
 
-parser.add_argument("--match-whole-lines"         , action="store_true", help="Match whole lines like FINDSTR")
-parser.add_argument("--print-non-matching-files"  , action="store_true", help="Print file names with no matches")
-parser.add_argument("--no-warn"                   , action="store_true", help="Don't print warning messages")
-parser.add_argument("--weave-matches"       , "-w", action="store_true", help="Weave regex matchdes")
-parser.add_argument("--strict-weave"        , "-W", action="store_true", help="Only print full match sets")
+parser.add_argument("--match-whole-lines"       ,       action="store_true"  , help="Match whole lines like FINDSTR")
+parser.add_argument("--print-non-matching-files",       action="store_true"  , help="Print file names with no matches")
+parser.add_argument("--no-warn"                 ,       action="store_true"  , help="Don't print warning messages")
+parser.add_argument("--weave-matches"           , "-w", action="store_true"  , help="Weave regex matchdes")
+parser.add_argument("--strict-weave"            , "-W", action="store_true"  , help="Only print full match sets")
 
-parser.add_argument("--order"               ,       nargs="+", default=["replace", "sub", "match-whole-lines", "match-regex", "print-matches", "no-duplicates"], help="The order in which modifications to matches are applied")
+parser.add_argument("--order"                   ,       nargs="+", default=["replace", "sub", "match-whole-lines", "match-regex", "print-matches", "no-duplicates"], help="The order in which modifications to matches are applied")
 
-parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
+parser.add_argument("--verbose"                 , "-v", action="store_true"  , help="Verbose info")
 parsedArgs=parser.parse_args()
 
 # TODO: Logging module
@@ -176,10 +176,10 @@ def _iterdir(dirname, dir_fd, dironly):
 					try:
 						if not dironly or entry.is_dir():
 							if entry.is_dir():
-								if     all(map(lambda x:re.search(x,                  entry.name ), parsedArgs.dir_name_regex          )) and\
-								       all(map(lambda x:re.search(x, os.path.realpath(entry.name)), parsedArgs.full_dir_name_regex     )) and\
-								   not any(map(lambda x:re.search(x,                  entry.name ), parsedArgs.dir_name_anti_regex     )) and\
-								   not any(map(lambda x:re.search(x, os.path.realpath(entry.name)), parsedArgs.full_dir_name_anti_regex)):
+								if     all(map(lambda x:re.search(x,                               entry.name  ), parsedArgs.dir_name_regex          )) and\
+								       all(map(lambda x:re.search(x, os.path.realpath(os.path.join(entry.name))), parsedArgs.full_dir_name_regex     )) and\
+								   not any(map(lambda x:re.search(x,                               entry.name  ), parsedArgs.dir_name_anti_regex     )) and\
+								   not any(map(lambda x:re.search(x, os.path.realpath(os.path.join(entry.name))), parsedArgs.full_dir_name_anti_regex)):
 									directories.append(entry.name)
 							else:
 								if fsencode is not None:
