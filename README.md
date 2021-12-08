@@ -78,11 +78,12 @@ options:
   --file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]
                         Like --file-regex but excludes files that match
   --match-regex MATCH_REGEX [MATCH_REGEX ...]
-                        Only output match if, adter --replace and --sub, it
-                        matches all of these regexes (unimplemented)
+                        Only continue with a match if it matches all of these
+                        regexes that apply to the match's regex index. The *
+                        in "jrep a b --match-regex c * d" makes the second
+                        match regex (d) apply to the second get regex (b)
   --match-anti-regex MATCH_ANTI_REGEX [MATCH_ANTI_REGEX ...]
-                        Only output match if, adter --replace and --sub, it
-                        doesn't fail any of these regexes (unimplemented)
+                        Like --match-regex but excludes matches that match
   --sort SORT, -S SORT  Sort files by ctime, mtime, atime, name, or size.
                         Prefix key with "r" to reverse. A windows-esque
                         "blockwise" sort is also available (todo: document)

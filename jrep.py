@@ -9,6 +9,9 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, itertools,
 """
 
 def parseLCName(name):
+	"""
+		Normalize all ways --limit or --count targets can be written
+	"""
 	def genOpts(*opts):
 		return "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
 	r=genOpts(r"file"         , r"dir"            , r"total")     +r"[-_]?"+\
@@ -22,6 +25,9 @@ def parseLCName(name):
 	return name
 
 class LimitAction(argparse.Action):
+	"""
+		Pre-processor for --limit targets
+	"""
 	def __call__(self, parser, namespace, values, option_string):
 		# Very jank
 		ret={}
@@ -30,6 +36,9 @@ class LimitAction(argparse.Action):
 		setattr(namespace, self.dest, ret)
 
 class CountAction(argparse.Action):
+	"""
+		Pre-processor for --count targets
+	"""
 	def __call__(self, parser, namespace, values, option_string):
 		ret=[]
 		"""for value in values:
@@ -53,6 +62,11 @@ class CountAction(argparse.Action):
 		setattr(namespace, self.dest, ret)
 
 class MatchRegexAction(argparse.Action):
+	"""
+		Pre-processor for --match-regex and --match-anti-regex
+		These options take a list of arguments
+		An argument of just * means that the following arguments should be applied to the next parsedArgs.regex
+	"""
 	def __call__(self, parser, namespace, values, option_string):
 		ret=[[]]
 		for x in values:
@@ -89,8 +103,8 @@ parser.add_argument("--full-dir-name-anti-regex",       nargs="+", default=[], h
 parser.add_argument("--file-regex"          ,       nargs="+", default=[], help="Regexes to test file contents for")
 parser.add_argument("--file-anti-regex"     ,       nargs="+", default=[], help="Like --file-regex but excludes files that match")
 
-parser.add_argument("--match-regex"         ,       nargs="+", default=[], action=MatchRegexAction, help="Only output match if, adter --replace and --sub, it matches all of these regexes (unimplemented)")
-parser.add_argument("--match-anti-regex"    ,       nargs="+", default=[], action=MatchRegexAction, help="Only output match if, adter --replace and --sub, it doesn't fail any of these regexes (unimplemented)")
+parser.add_argument("--match-regex"         ,       nargs="+", default=[], action=MatchRegexAction, help="Only continue with a match if it matches all of these regexes that apply to the match's regex index. The * in \"jrep a b --match-regex c * d\" makes the second match regex (d) apply to the second get regex (b)")
+parser.add_argument("--match-anti-regex"    ,       nargs="+", default=[], action=MatchRegexAction, help="Like --match-regex but excludes matches that match")
 
 parser.add_argument("--sort"                , "-S",                        help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available (todo: document)")
 #parser.add_argument("--sort-regex"         ,       nargs="+", default=[], help="Regexes to apply to file names keys (like --replace) for purposes of sorting")
@@ -124,6 +138,7 @@ parser.add_argument("--order"               ,       nargs="+", default=["replace
 parser.add_argument("--verbose"             , "-v", action="store_true"  , help="Verbose info")
 parsedArgs=parser.parse_args()
 
+# TODO: Logging module
 def verbose(x):
 	if parsedArgs.verbose:
 		caller=inspect.stack()[1]
@@ -232,6 +247,9 @@ ofmt={
 }
 
 def handleCount(rules, runData):
+	"""
+		A jank function that handles --count stuff
+	"""
 	categories={"t":"total", "d":"dir",  "f":"file"                }
 	subCats   ={             "d":"dirs", "f":"files", "m":"matches"}
 	modes     ={"f":"failed", "p":"passed"}
@@ -296,26 +314,35 @@ class JSObj:
 
 @functools.cache
 def _blockwiseSort(x, y):
-	xblocks=re.findall(r"\d+|[^\d]+", x)
+	"""
+		The main blockwise sort handler
+		This sort key mimics how the Windows file explorer places "abc10.txt" after "abc2.txt" but more generally
+		It first splits both x and y into chunks of integer substrings and non-integer substrings
+		"abc123def" -> ["abc", "123", "def"]
+		It then compares the Nth element of each list (a "blocK") as strings UNLESS both blocks are integers, in which case it compares them as integers
+		So while "2" is larger than "10", they'd be compared as 2 and 10 and would thus be sorted properly
+	"""
+	xblocks=re.findall(r"\d+|[^\d]+", x) # "abc123def" -> ["abc", "123", "def"]
 	yblocks=re.findall(r"\d+|[^\d]+", y)
-	for i in range(min(len(xblocks), len(yblocks))):
-		if xblocks[i].isdigit() and yblocks[i].isdigit():
+	for xblock, yblock in zip(xblocks, yblocks):
+		if xblock.isdigit() and yblock.isdigit():
 			# Compare the blocks as ints
-			if int(xblocks[i])!=int(yblocks[i]):
-				return int(xblocks[i])-int(yblocks[i]) # An output of -53245 is treated the same as -1
+			if int(xblock)!=int(yblock):
+				return int(xblock)-int(yblock) # An output of -53245 is treated the same as -1
+			# If they're equal, move on to the next block pair
 		else:
 			# Compare the blocks as strings
-			if xblocks[i]!=yblocks[i]:
-				return (xblocks[i]>yblocks[i])-(xblocks[i]<yblocks[i])
+			if xblock!=yblock:
+				return (xblock>yblock)-(xblock<yblock)
 	return 0
 
 @functools.cmp_to_key
 def blockwiseSort(x, y):
 	xlist=x.replace("\\", "/").split("/")
 	ylist=y.replace("\\", "/").split("/")
-	for i in range(min(len(xlist), len(ylist))):
-		if _blockwiseSort(xlist[i], ylist[i])!=0:
-			return _blockwiseSort(xlist[i], ylist[i])
+	for xitem, yitem in zip(xlist, ylist):
+		if _blockwiseSort(xitem, yitem)!=0:
+			return _blockwiseSort(xitem, yitem)
 	return (len(xlist)>len(ylist))-(len(xlist)<len(ylist))
 
 def sortFiles(files, key=None):
@@ -350,7 +377,7 @@ def sortFiles(files, key=None):
 def fileContentsDontMatter():
 	return parsedArgs.dont_print_matches\
 	       and not any(parsedArgs.regex)\
-	       and not parsedArgs.file_regex       and not parsedArgs.file_anti_regex\
+	       and not parsedArgs.file_regex and not parsedArgs.file_anti_regex\
 	       and not {"fm", "dm", "tm"}.intersection(parsedArgs.limit.keys())\
 	       and not {"fm", "dm", "tm"}.intersection(parsedArgs.count)
 
@@ -383,7 +410,7 @@ def getFiles():
 		yield from parsedArgs.file
 
 		# Globs
-		verbose("Yielding globs") # r/PythonOOC
+		verbose("Yielding globs")
 		# --stdin-globs
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_globs:
 			for pattern in sys.stdin.read().splitlines():
@@ -441,7 +468,7 @@ def printMatch(match, regexIndex):
 	sys.stdout.buffer.write(b"\n")
 	sys.stdout.buffer.flush()
 
-# Abbreviations to make my editor not show a horizontal scrollbar (my version of PEP8)
+# Abbreviations to make the code slightly cleaner
 _FML=parsedArgs.limit["fm"] if "fm" in parsedArgs.limit else 0
 _DML=parsedArgs.limit["dm"] if "dm" in parsedArgs.limit else 0
 _TML=parsedArgs.limit["tm"] if "tm" in parsedArgs.limit else 0
@@ -464,9 +491,10 @@ runData["total"]["matchesPerRegex"]=[0 for x in parsedArgs.regex]
 runData["total"]["filesPerRegex"  ]=[0 for x in parsedArgs.regex]
 runData["total"]["dirsPerRegex"   ]=[0 for x in parsedArgs.regex]
 
-# <Match processing function> #
-
 def delayedSub(repl, match):
+	"""
+		Use the secret sre_parse module to emulate re.sub with a re.Match object
+	"""
 	parsedTemplate=sre_parse.parse_template(repl, match.re)
 	for x in parsedTemplate[0]:
 		parsedTemplate[1][x[0]]=match[x[1]]
@@ -476,15 +504,20 @@ def delayedSub(repl, match):
 	})
 
 def funcReplace(parsedArgs, match, **kwargs):
+	"""
+		Handle --replace
+	"""
 	if parsedArgs.replace:
 		replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
 		match=delayedSub(replacement.encode(errors="ignore"), match)
 	return match
 
 def funcSub(parsedArgs, match, **kwargs):
-	# Handle --sub
-	# TYSM mCoding for explaining how zip works
-	# (zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
+	"""
+		Handle --sub
+		TYSM mCoding for explaining how zip works
+		(zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
+	"""
 	for pair in zip(parsedArgs.sub[0::2], parsedArgs.sub[1::2]):
 		match=JSObj({
 			**match,
@@ -493,7 +526,9 @@ def funcSub(parsedArgs, match, **kwargs):
 	return match
 
 def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
-	# --match-whole-lines
+	"""
+		Handle --match-whole-lines
+	"""
 	if parsedArgs.match_whole_lines:
 		lineStart=file["data"].rfind(b"\n", 0, match.span()[1])
 		lineEnd  =file["data"]. find(b"\n",    match.span()[1])
@@ -506,18 +541,29 @@ def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 	return match
 
 class Continue(Exception):
+	"""
+		Raised by funcMatchRegex when a match failes the match regex stuff
+	"""
 	pass
 
 def funcMatchRegex(matchRegex, matchAntiRegex, match, **kwargs):
+	"""
+		Handle --match-regex and --match-anti-regex
+	"""
 	if not all(map(lambda x:re.search(x, match[0]), matchRegex    )) or\
-       any(map(lambda x:re.search(x, match[0]), matchAntiRegex)):
+           any(map(lambda x:re.search(x, match[0]), matchAntiRegex)):
 		raise Continue()
 
 class PrintedName(Exception):
+	"""
+		Raised by funcPrintName when a file name is printed
+	"""
 	pass
 
 def funcPrintMatches(parsedArgs, file, printedName, regexIndex, **kwargs):
-	# Print matches
+	"""
+		Handle file name printing
+	"""
 	if match[0] not in runData["matchedStrings"]:
 		# Print file name
 		if not printedName:
@@ -534,20 +580,20 @@ def funcPrintMatches(parsedArgs, file, printedName, regexIndex, **kwargs):
 	raise PrintedName
 
 def funcNoDuplicates(parsedArgs, match, **kwargs):
-	# Handle --no-duplicates
+	"""
+		Handle --no-duplicates
+	"""
 	if parsedArgs.no_duplicates:
 		runData["matchedStrings"].append(match[0])
 
 funcs={
-	"replace": funcReplace,
-	"sub": funcSub,
+	"replace"          : funcReplace,
+	"sub"              : funcSub,
 	"match-whole-lines": funcMatchWholeLines,
-	"match-regex": funcMatchRegex,
-	"print-matches": funcPrintMatches,
-	"no-duplicates": funcNoDuplicates
+	"match-regex"      : funcMatchRegex,
+	"print-matches"    : funcPrintMatches,
+	"no-duplicates"    : funcNoDuplicates
 }
-
-# </Match processing function> #
 
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
 	verbose(f"Processing {file}")
@@ -701,6 +747,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 # --dir-match-count and --dir-file count
 if fileDir!=None and runData["dir"]["totalMatches"]:
+	# Only runs if files were handled in two or more directories
 	handleCount(rules=["newDir"], runData=runData)
 
 # --total-match-count, --total-file-count, and --total-dir-count
