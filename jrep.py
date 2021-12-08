@@ -184,7 +184,7 @@ def _iterdir(dirname, dir_fd, dironly):
 glob._iterdir=_iterdir
 
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
-	warn("Error: Length of --replace must be either 1 or equal to the number of regexes", file=sys.stderr)
+	warn("Error: Length of --replace must be either 1 or equal to the number of regexes")
 	exit(1)
 
 # Simple implementation of --escape
