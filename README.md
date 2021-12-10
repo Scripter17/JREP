@@ -2,7 +2,8 @@
 
 JREP is a general-purpose command line utility that takes the basic concept of GREP and transforms it into an infinitely more versatile tool fit for the modern world  
 
-Until I can make a proper README, here's the output of `jrep --help`
+Until I can make a proper README, here's the output of `jrep --help`  
+For details, [check below](#details)
 
 <!--<HELP MSG>-->
 ```
@@ -16,8 +17,10 @@ usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
                [--full-name-ignore-regex FULL_NAME_IGNORE_REGEX [FULL_NAME_IGNORE_REGEX ...]]
                [--dir-name-regex DIR_NAME_REGEX [DIR_NAME_REGEX ...]]
                [--dir-name-anti-regex DIR_NAME_ANTI_REGEX [DIR_NAME_ANTI_REGEX ...]]
+               [--dir-name-ignore-regex DIR_NAME_IGNORE_REGEX [DIR_NAME_IGNORE_REGEX ...]]
                [--full-dir-name-regex FULL_DIR_NAME_REGEX [FULL_DIR_NAME_REGEX ...]]
                [--full-dir-name-anti-regex FULL_DIR_NAME_ANTI_REGEX [FULL_DIR_NAME_ANTI_REGEX ...]]
+               [--full-dir-name-ignore-regex FULL_DIR_NAME_IGNORE_REGEX [FULL_DIR_NAME_IGNORE_REGEX ...]]
                [--file-regex FILE_REGEX [FILE_REGEX ...]]
                [--file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]]
                [--match-regex MATCH_REGEX [MATCH_REGEX ...]]
@@ -53,7 +56,7 @@ options:
                         Like --name-regex but excludes file names that match
   --name-ignore-regex NAME_IGNORE_REGEX [NAME_IGNORE_REGEX ...]
                         Like --name-anti-regex but doesn't contribute to
-                        --count dir-failed-files
+                        --count *-failed-files
   --full-name-regex FULL_NAME_REGEX [FULL_NAME_REGEX ...]
                         Like --name-regex but for absolute file paths (C:/xyz
                         instead of xyz)
@@ -62,18 +65,24 @@ options:
                         match
   --full-name-ignore-regex FULL_NAME_IGNORE_REGEX [FULL_NAME_IGNORE_REGEX ...]
                         Like --full-name-anti-regex but doesn't contribute to
-                        --count dir-failed-files
+                        --count *-failed-files
   --dir-name-regex DIR_NAME_REGEX [DIR_NAME_REGEX ...]
                         If a directory name matches all supplied regexes,
                         enter it. Otherwise continue
   --dir-name-anti-regex DIR_NAME_ANTI_REGEX [DIR_NAME_ANTI_REGEX ...]
                         --dir-name-regex but ignore directories that match any
                         of the supplies regexes
+  --dir-name-ignore-regex DIR_NAME_IGNORE_REGEX [DIR_NAME_IGNORE_REGEX ...]
+                        --dir-name-anti-regex but doesn't contribute to
+                        --count total-failed-dirs
   --full-dir-name-regex FULL_DIR_NAME_REGEX [FULL_DIR_NAME_REGEX ...]
                         --dir-name-regex but applied to full directory paths
   --full-dir-name-anti-regex FULL_DIR_NAME_ANTI_REGEX [FULL_DIR_NAME_ANTI_REGEX ...]
                         --dir-name-anti-regex but applied to full directory
                         paths
+  --full-dir-name-ignore-regex FULL_DIR_NAME_IGNORE_REGEX [FULL_DIR_NAME_IGNORE_REGEX ...]
+                        --full-dir-name-anti-regex but doesn't contribute to
+                        --count total-failed-dirs
   --file-regex FILE_REGEX [FILE_REGEX ...]
                         Regexes to test file contents for
   --file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]
@@ -134,3 +143,22 @@ options:
 
 ```
 <!--</HELP MSG>-->
+
+# Details
+
+## `--order`
+
+- The default value for `--order` is `replace`, `sub`, `match-whole-lines`, `match-regex`, `print-matches`, `no-duplicates`
+
+- Changing the order of `sub`, `replace`, and `match-whole-lines` will work but will make next to no sense
+
+- The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain
+
+## Blockwise sort
+
+You know how Windows will list `abc2.jpg` before `abc10.jpg` despite, when comparing the two names as strings, most sorting keys (the functions sorting algorithms use to compare elements) will do it the other way around? Blockwise sort is designed to mimic that but more generally
+
+When comparing two filenames, it first splits each name into a list of number and non-number parts. (Ex: `"abc123xyz789"` -> `["abc", "123", "xyz", "789"]`)  
+It then compares the lists element-by-element. If both lists have a number at at a certain index, it'll compare them as numbers, otherwise they'll be compared as strings
+
+TL;DR: If you use numbers in filenames to sort files you don't need to bother with leading zeros
