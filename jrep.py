@@ -14,11 +14,11 @@ def parseLCName(name):
 	"""
 	def genOpts(*opts):
 		return "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
-	r=genOpts(r"file"         , r"dir"            , r"total")     +r"[-_]?"+\
-	  genOpts(r"match(?:e?s)?", r"files?"         , r"dirs?")     +r"[-_]?"+\
-	  genOpts(r"failures?"    , r"pass(?:e?[sd])?"          )+r"?"+r"[-_]?"+\
-	  genOpts(r"counts?"      , r"percents?"                )+r"?"+r"[-_]?"+\
-	  genOpts(r"regex"        , r"total"                    )+r"?"
+	r=genOpts(r"file"           , r"dir"            , r"total")     +r"[-_]?"+\
+	  genOpts(r"match(?:e?s)?"  , r"files?"         , r"dirs?")     +r"[-_]?"+\
+	  genOpts(r"fail(?:ures?|d)", r"pass(?:e?[sd])?"          )+r"?"+r"[-_]?"+\
+	  genOpts(r"counts?"        , r"percents?"                )+r"?"+r"[-_]?"+\
+	  genOpts(r"regex"          , r"total"                    )+r"?"
 	m=re.match(r, name)
 	if m:
 		return "".join(filter(lambda x:x, m.groups())).lower()
@@ -151,6 +151,39 @@ def warn(x):
 verbose("JREP preview version")
 verbose(parsedArgs)
 
+def regexCheckerThing(partial, partialPass, partialFail, full="", fullPass=[], fullFail=[], partialIgnore=[], fullIgnore=[]):
+	"""
+		True  = Passed
+		False = Failed
+		None  = Ignored
+	"""
+
+	if any(map(lambda x:re.search(x, partial), partialIgnore)) or\
+	   any(map(lambda x:re.search(x, full   ), fullIgnore   )):
+		return None
+	if any(map(lambda x:re.search(x, partial), partialFail)) or\
+	   any(map(lambda x:re.search(x, full   ), fullFail   )):
+		return False
+	if all(map(lambda x:re.search(x, partial), partialPass)) and\
+	   all(map(lambda x:re.search(x, full   ), fullPass   )):
+		return True
+	return False
+
+def filenameChecker(filename, fullFilename=None):
+	"""
+		Shorthand for handling filenames with regexCheckerThing
+	"""
+	return regexCheckerThing(
+		filename,
+		parsedArgs.name_regex,
+		parsedArgs.name_anti_regex,
+		fullFilename or os.path.realpath(filename),
+		parsedArgs.full_name_regex,
+		parsedArgs.full_name_anti_regex,
+		parsedArgs.name_ignore_regex,
+		parsedArgs.full_name_ignore_regex,
+	)
+
 def _iterdir(dirname, dir_fd, dironly):
 	try:
 		fd = None
@@ -176,10 +209,14 @@ def _iterdir(dirname, dir_fd, dironly):
 					try:
 						if not dironly or entry.is_dir():
 							if entry.is_dir():
-								if     all(map(lambda x:re.search(x,                               entry.name  ), parsedArgs.dir_name_regex          )) and\
-								       all(map(lambda x:re.search(x, os.path.realpath(os.path.join(entry.name))), parsedArgs.full_dir_name_regex     )) and\
-								   not any(map(lambda x:re.search(x,                               entry.name  ), parsedArgs.dir_name_anti_regex     )) and\
-								   not any(map(lambda x:re.search(x, os.path.realpath(os.path.join(entry.name))), parsedArgs.full_dir_name_anti_regex)):
+								if regexCheckerThing(
+								   entry.name,
+								   parsedArgs.dir_name_regex,
+								   parsedArgs.dir_name_anti_regex,
+								   os.path.realpath(os.path.join(entry.name, dirname)),
+								   parsedArgs.full_dir_name_regex,
+								   parsedArgs.full_dir_name_anti_regex
+								   )==1:
 									directories.append(entry.name)
 							else:
 								if fsencode is not None:
@@ -310,7 +347,7 @@ class JSObj:
 	def __setitem__(self, key, val):        self.obj[key]=val
 	def __delitem__(self, key):      del    self.obj[key]
 
-	def keys(self): return self.obj.keys()
+	def keys(self): return self.obj.keys() # Makes **JSObj work
 
 @functools.cache
 def _blockwiseSort(x, y):
@@ -381,12 +418,6 @@ def fileContentsDontMatter():
 	       and not {"fm", "dm", "tm"}.intersection(parsedArgs.limit.keys())\
 	       and not {"fm", "dm", "tm"}.intersection(parsedArgs.count)
 
-def fileNameFailsNameRegexes(fileName):
-	return not all(map(lambda x:re.search(x,                  fileName ), parsedArgs.name_regex          )) or\
-	       not all(map(lambda x:re.search(x, os.path.realpath(fileName)), parsedArgs.full_name_regex     )) or\
-	           any(map(lambda x:re.search(x,                  fileName ), parsedArgs.name_anti_regex     )) or\
-	           any(map(lambda x:re.search(x, os.path.realpath(fileName)), parsedArgs.full_name_anti_regex))
-
 def getFiles():
 	"""
 		Yields files selected with --file and --glob as {"file":filename, "data":mmapFile/bytes}
@@ -428,7 +459,7 @@ def getFiles():
 		verbose(f"Pre-processing \"{file}\"")
 
 		if os.path.isfile(file):
-			if fileContentsDontMatter() or fileNameFailsNameRegexes(file):
+			if fileContentsDontMatter() or not filenameChecker(file):
 				# Does the file content matter? No? Ignore it then
 				verbose("Optimizing away actually opening the file")
 				yield {"name": file, "data": b"", "isDir": False, "stdin": False}
@@ -448,11 +479,17 @@ def getFiles():
 			yield {"name": file, "isDir": True, "stdin": False}
 
 def processFileName(fname):
+	"""
+		Process filenames for printing
+	"""
 	if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
 	if parsedArgs.print_posix_paths: fname=fname.replace("\\", "/")
 	return fname
 
 def processDirName(dname):
+	"""
+		Process directory names for printing
+	"""
 	if os.path.isfile(dname):
 		dname=os.path.dirname(dname)
 	dname=dname or "."
@@ -477,7 +514,7 @@ _TFL=parsedArgs.limit["tf"] if "tf" in parsedArgs.limit else 0
 _TDL=parsedArgs.limit["td"] if "td" in parsedArgs.limit else 0
 
 # Tracking stuffs
-fileDir=None
+currDir=None
 lastDir=None
 
 runData={
@@ -596,66 +633,64 @@ funcs={
 }
 
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
-	verbose(f"Processing {file}")
-	#runData["file"]={"matches":[list() for x in range(len(parsedArgs.regex))], "fmc":[0 for x in range(len(parsedArgs.regex))]}
-
-	runData["file" ]["matchesPerRegex"]=[0 for x in parsedArgs.regex]
-	runData["file" ]["totalMatches"   ]=0
-
+	verbose(f"Processing \"{file['name']}\"")
+	if file["isDir"]:
+		verbose(f"\"{file['name']}\" is a directory; Continuing")
+		continue
 	printedName=False
 
-	if file["isDir"]:
-		continue
+	runData["file"]["matchesPerRegex"]=[0 for x in parsedArgs.regex]
+	runData["file"]["totalMatches"   ]=0
 
-	# Handle --name-regex, --full-name-regex, --name-anti-regex, and--full-name-anti-regex
-	if any(map(lambda x:re.search(x,                  file["name"] ), parsedArgs.name_ignore_regex     )) or\
-	   any(map(lambda x:re.search(x, os.path.realpath(file["name"])), parsedArgs.full_name_ignore_regex)):
-	   verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name ignore regexes")
+	# Handle --name-regex stuff
+	nameRegexResult=filenameChecker(file["name"])
+	if nameRegexResult is None:
+	   verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched an ignore regex; Continuing...")
 	   continue
 
 	# --file-limit, --dir-match-limit, --dir-file-count, and --dir-match-count
-	lastDir=fileDir
-	fileDir=os.path.dirname(file["name"])
+	lastDir=currDir
+	currDir=os.path.dirname(file["name"])
 
-	# --dir-match-count and --dir-file-count
-	if lastDir!=None and lastDir!=fileDir and runData["dir"]["totalMatches"]:
-		handleCount(rules=["newDir"], runData=runData)
-
-	# --limit td
-	if _TDL and runData["total"]["totalDirs"]>=_TDL:
-		continue
-
-	# New directory; Initialize dir data
-	if lastDir!=fileDir:
-		# --print-directories
+	# Handle new directories
+	if lastDir!=currDir:
+		# Print data from last dir (--count)
+		if lastDir!=None:
+			verbose("Just exited a directory; Printing runData...")
+			handleCount(rules=["newDir"], runData=runData)
+		# Handle --limit total-dir
+		if _TDL and runData["total"]["totalDirs"]>=_TDL:
+			verbose("Total directory limit reached; Exiting...")
+			break
+		# Handle --print-directories
 		if parsedArgs.print_directories:
-			print(ofmt["dname"].format(dname=processDirName(fileDir)))
-		runData["total"]["totalDirs"]+=1
-		runData["dir"]["totalFiles"]=0
-		runData["dir"]["matchesPerRegex"]=[0 for x in parsedArgs.regex]
-		runData["dir"]["filesPerRegex"  ]=[0 for x in parsedArgs.regex]
-		runData["dir"]["totalMatches"   ]=0
-		runData["dir"]["failedFiles"]=0
-		runData["dir"]["passedFiles"]=0
+			print(ofmt["dname"].format(dname=processDirName(currDir)))
+		# Initialize relevant runData
+		runData["total"]["totalDirs"      ]+=1
+		runData["dir"  ]["totalFiles"     ] =0
+		runData["dir"  ]["matchesPerRegex"] =[0 for x in parsedArgs.regex]
+		runData["dir"  ]["filesPerRegex"  ] =[0 for x in parsedArgs.regex]
+		runData["dir"  ]["totalMatches"   ] =0
+		runData["dir"  ]["failedFiles"    ] =0
+		runData["dir"  ]["passedFiles"    ] =0
 
-	# Handle name and file regexes
-	_fileRegexCheck=lambda regex: re.search(regex.encode(errors="ignore"), file["data"])
-	if fileNameFailsNameRegexes(file["name"]) or\
-	   any(map(_fileRegexCheck, parsedArgs.file_anti_regex)) or not all(map(_fileRegexCheck, parsedArgs.file_regex)):
-		# Really should make how this works configurable
-		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" failed the name regexes")
+	# Handle name fail regexes
+	# It has to be done here to make sure runData["dir"] doesn't miss stuff
+	if filenameChecker(file["name"]) is False:
+		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched a fail regex; Continuing...")
 		runData["dir"  ]["failedFiles"]+=1
 		runData["total"]["failedFiles"]+=1
 		continue
 
-	# Handle --file-limit
+	# Handle --limit dir-files and dir-matches
 	# Really slow on big directories
+	# Might eventually have this hook into _iterdir using a global flag or something
 	if (_DFL!=0 and runData["dir"]["totalFiles"]==_DFL) or (_DML!=0 and runData["dir"]["totalMatches"]>=_DML):
 		continue
 
 	# Main matching stuff
-	_continue=False # PEP-3136 would've come in clutch here
-	matchIndex=0 # Just makes --XYZ-match-count stuff and --print-non-matching-files easier
+	matchIndex=0 # Just makes stuff easier
+	matchedAny=False
 	for (regexIndex, regex), matchRegex, matchAntiRegex in itertools.zip_longest(enumerate(parsedArgs.regex), parsedArgs.match_regex, parsedArgs.match_anti_regex, fillvalue=[]):
 		verbose(f"Handling regex {regexIndex}: {regex}")
 
@@ -673,18 +708,18 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			matches=re.finditer(regex, file["data"])
 
 			# Process matches
-			matchIndex=0
 			for matchIndex, match in enumerate(matches, start=1):
+				matchedAny=True
 				if matchIndex==1:
-					runData["total"]["filesPerRegex"  ][regexIndex]+=1
-					runData["dir"  ]["filesPerRegex"  ][regexIndex]+=1
-					if lastDir!=fileDir:
-						runData["total"]["dirsPerRegex"   ][regexIndex]+=1
+					runData["total"]["filesPerRegex"][regexIndex]+=1
+					runData["dir"  ]["filesPerRegex"][regexIndex]+=1
+					if lastDir!=currDir:
+						runData["total"]["dirsPerRegex"][regexIndex]+=1
 					if regexIndex==0:
 						runData["dir"  ]["passedFiles"]+=1
 						runData["total"]["passedFiles"]+=1
-						runData["total"]["totalFiles"]+=1
-						runData["dir"  ]["totalFiles"]+=1
+						runData["total"]["totalFiles" ]+=1
+						runData["dir"  ]["totalFiles" ]+=1
 				runData["total"]["matchesPerRegex"][regexIndex]+=1
 				runData["dir"  ]["matchesPerRegex"][regexIndex]+=1
 				runData["file" ]["matchesPerRegex"][regexIndex]+=1
@@ -718,15 +753,16 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					printedName=True
 
 				# Handle --match-limit, --dir-match-limit, and --total-match-limit
-				if (_FML!=0 and matchIndex                      >=_FML) or\
-				   (_DML!=0 and runData["dir"  ]["totalMatches"]>=_DML) or\
-				   (_TML!=0 and runData["total"]["totalMatches"]>=_TML):
+				if (_FML and matchIndex                      >=_FML) or\
+				   (_DML and runData["dir"  ]["totalMatches"]>=_DML) or\
+				   (_TML and runData["total"]["totalMatches"]>=_TML):
 					break
 
 		except FloatingPointError as AAAAA:
 			warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
 
-	if parsedArgs.print_non_matching_files and matchIndex==0:
+	if parsedArgs.print_non_matching_files and not matchedAny:
+		verbose(f"\"{file['name']}\" didn't match any file regexes, but --print-non-matching-files was specified")
 		print(ofmt["fname"].format(fname=processFileName(file["name"])))
 
 	if parsedArgs.weave_matches:
@@ -737,16 +773,16 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	handleCount(rules=["file"], runData=runData)
 
-	# For if a file failes the --name-regex stuff
-	if _continue:
-		continue
-
-	# Hanlde --total-match-limit and --total-file-limit
-	if (_TML!=0 and runData["total"]["totalMatches"]>=_TML) or (_TFL!=0 and fileIndex>=_TFL):
+	# Hanlde --limit total-matches and total-files
+	if _TML!=0 and runData["total"]["totalMatches"]>=_TML:
+		verbose("Total match limit reached; Exiting")
+		break
+	if _TFL!=0 and fileIndex>=_TFL:
+		verbose("Total file limit reached; Exiting")
 		break
 
 # --dir-match-count and --dir-file count
-if fileDir!=None and runData["dir"]["totalMatches"]:
+if currDir!=None and runData["dir"]["totalMatches"]:
 	# Only runs if files were handled in two or more directories
 	handleCount(rules=["newDir"], runData=runData)
 
