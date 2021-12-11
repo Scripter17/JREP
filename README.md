@@ -18,19 +18,22 @@ usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
                [--dir-name-regex DIR_NAME_REGEX [DIR_NAME_REGEX ...]]
                [--dir-name-anti-regex DIR_NAME_ANTI_REGEX [DIR_NAME_ANTI_REGEX ...]]
                [--dir-name-ignore-regex DIR_NAME_IGNORE_REGEX [DIR_NAME_IGNORE_REGEX ...]]
-               [--full-dir-name-regex FULL_DIR_NAME_REGEX [FULL_DIR_NAME_REGEX ...]]
-               [--full-dir-name-anti-regex FULL_DIR_NAME_ANTI_REGEX [FULL_DIR_NAME_ANTI_REGEX ...]]
-               [--full-dir-name-ignore-regex FULL_DIR_NAME_IGNORE_REGEX [FULL_DIR_NAME_IGNORE_REGEX ...]]
+               [--dir-full-name-regex DIR_FULL_NAME_REGEX [DIR_FULL_NAME_REGEX ...]]
+               [--dir-full-name-anti-regex DIR_FULL_NAME_ANTI_REGEX [DIR_FULL_NAME_ANTI_REGEX ...]]
+               [--dir-full-name-ignore-regex DIR_FULL_NAME_IGNORE_REGEX [DIR_FULL_NAME_IGNORE_REGEX ...]]
                [--file-regex FILE_REGEX [FILE_REGEX ...]]
                [--file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]]
+               [--file-ignore-regex FILE_IGNORE_REGEX [FILE_IGNORE_REGEX ...]]
                [--match-regex MATCH_REGEX [MATCH_REGEX ...]]
                [--match-anti-regex MATCH_ANTI_REGEX [MATCH_ANTI_REGEX ...]]
-               [--sort SORT] [--no-headers] [--print-directories]
-               [--print-file-names] [--print-full-paths] [--print-posix-paths]
+               [--match-ignore-regex MATCH_IGNORE_REGEX [MATCH_IGNORE_REGEX ...]]
+               [--sort SORT] [--sort-regex SORT_REGEX [SORT_REGEX ...]]
+               [--no-headers] [--print-directories] [--print-file-names]
+               [--print-full-paths] [--print-posix-paths]
                [--dont-print-matches] [--print-match-offset]
                [--print-match-range] [--replace REPLACE [REPLACE ...]]
                [--sub SUB [SUB ...]] [--escape] [--count COUNT [COUNT ...]]
-               [--limit LIMIT [LIMIT ...]] [--depth-first]
+               [--limit LIMIT [LIMIT ...]] [--print-run-data] [--depth-first]
                [--glob-root-dir GLOB_ROOT_DIR] [--match-whole-lines]
                [--print-non-matching-files] [--no-warn] [--weave-matches]
                [--strict-weave] [--order ORDER [ORDER ...]] [--verbose]
@@ -54,6 +57,7 @@ options:
                         going. Otherwise continue
   --name-anti-regex NAME_ANTI_REGEX [NAME_ANTI_REGEX ...], -T NAME_ANTI_REGEX [NAME_ANTI_REGEX ...]
                         Like --name-regex but excludes file names that match
+                        any of the supplied regexes
   --name-ignore-regex NAME_IGNORE_REGEX [NAME_IGNORE_REGEX ...]
                         Like --name-anti-regex but doesn't contribute to
                         --count *-failed-files
@@ -61,8 +65,7 @@ options:
                         Like --name-regex but for absolute file paths (C:/xyz
                         instead of xyz)
   --full-name-anti-regex FULL_NAME_ANTI_REGEX [FULL_NAME_ANTI_REGEX ...]
-                        Like --full-name-regex but excludes file names that
-                        match
+                        Like --name-anti-regex but applied to full file paths
   --full-name-ignore-regex FULL_NAME_IGNORE_REGEX [FULL_NAME_IGNORE_REGEX ...]
                         Like --full-name-anti-regex but doesn't contribute to
                         --count *-failed-files
@@ -70,23 +73,28 @@ options:
                         If a directory name matches all supplied regexes,
                         enter it. Otherwise continue
   --dir-name-anti-regex DIR_NAME_ANTI_REGEX [DIR_NAME_ANTI_REGEX ...]
-                        --dir-name-regex but ignore directories that match any
-                        of the supplies regexes
+                        Like --dir-name-regex but excludes directories that
+                        match any of the supplied regexes
   --dir-name-ignore-regex DIR_NAME_IGNORE_REGEX [DIR_NAME_IGNORE_REGEX ...]
-                        --dir-name-anti-regex but doesn't contribute to
+                        Like --dir-name-anti-regex but doesn't contribute to
                         --count total-failed-dirs
-  --full-dir-name-regex FULL_DIR_NAME_REGEX [FULL_DIR_NAME_REGEX ...]
-                        --dir-name-regex but applied to full directory paths
-  --full-dir-name-anti-regex FULL_DIR_NAME_ANTI_REGEX [FULL_DIR_NAME_ANTI_REGEX ...]
-                        --dir-name-anti-regex but applied to full directory
-                        paths
-  --full-dir-name-ignore-regex FULL_DIR_NAME_IGNORE_REGEX [FULL_DIR_NAME_IGNORE_REGEX ...]
-                        --full-dir-name-anti-regex but doesn't contribute to
-                        --count total-failed-dirs
+  --dir-full-name-regex DIR_FULL_NAME_REGEX [DIR_FULL_NAME_REGEX ...]
+                        Like --dir-name-regex but for absolute directory paths
+                        (C:/xyz instead of xyz)
+  --dir-full-name-anti-regex DIR_FULL_NAME_ANTI_REGEX [DIR_FULL_NAME_ANTI_REGEX ...]
+                        Like --dir-name-anti-regex but applied to full
+                        directory paths
+  --dir-full-name-ignore-regex DIR_FULL_NAME_IGNORE_REGEX [DIR_FULL_NAME_IGNORE_REGEX ...]
+                        Like --dir-full-name-anti-regex but doesn't contribute
+                        to --count total-failed-dirs
   --file-regex FILE_REGEX [FILE_REGEX ...]
                         Regexes to test file contents for
   --file-anti-regex FILE_ANTI_REGEX [FILE_ANTI_REGEX ...]
-                        Like --file-regex but excludes files that match
+                        Like --file-regex but excludes files that match of the
+                        supplied regexes
+  --file-ignore-regex FILE_IGNORE_REGEX [FILE_IGNORE_REGEX ...]
+                        Like --file-anti-regex but doesn't contribute to
+                        --count *-failed-files
   --match-regex MATCH_REGEX [MATCH_REGEX ...]
                         Basically applies str.split("*") to the list of
                         --match-regex. If a match matches all regexes in the
@@ -94,11 +102,17 @@ options:
                         current get regex) continue processing the match,
                         otherwise move on to the next one
   --match-anti-regex MATCH_ANTI_REGEX [MATCH_ANTI_REGEX ...]
-                        --match-regex but excludes matches that match any of
-                        the supplies regexes
+                        Like --match-regex but excludes matches that match any
+                        of the supplied regexes
+  --match-ignore-regex MATCH_IGNORE_REGEX [MATCH_IGNORE_REGEX ...]
+                        Like --match-anti-regex but doesn't contribute to
+                        --count *-failed-matches
   --sort SORT, -S SORT  Sort files by ctime, mtime, atime, name, or size.
                         Prefix key with "r" to reverse. A windows-esque
                         "blockwise" sort is also available (todo: document)
+  --sort-regex SORT_REGEX [SORT_REGEX ...]
+                        Regexes to apply to file names keys (like --replace)
+                        for purposes of sorting (EXPERIMENTAL)
   --no-headers, -H      Don't print match: or file: before lines
   --print-directories, -d
                         Print names of explored directories
@@ -127,14 +141,16 @@ options:
   --limit LIMIT [LIMIT ...], -l LIMIT [LIMIT ...]
                         Limit match/file/dir per file, dir, and/or total (Ex:
                         --limit filematch=1 total_dirs=5)
+  --print-run-data      Print raw runData JSON
   --depth-first         Enter subdirectories before processing files
   --glob-root-dir GLOB_ROOT_DIR
-                        Root dir to run globs in
+                        Root dir to run globs in (EXPERIMENTAL)
   --match-whole-lines   Match whole lines like FINDSTR
   --print-non-matching-files
                         Print file names with no matches
   --no-warn             Don't print warning messages
-  --weave-matches, -w   Weave regex matchdes
+  --weave-matches, -w   Weave regex matchdes (print first results for each get
+                        regex, then second results, etc.)
   --strict-weave, -W    Only print full match sets
   --order ORDER [ORDER ...]
                         The order in which modifications to matches are
@@ -145,6 +161,10 @@ options:
 <!--</HELP MSG>-->
 
 # Details
+
+## `--match-regex`
+
+`--match-regex a b * c d e * f g h i` gets parsed into `[["a", "b"], ["c", "d", "e"], ["f", "g", "h", "i"]]`. Assuming there are 3 "get" regexes (the `x`, `y`, and `z` in `jrep x y z`), any match from the first get regex would have to match both the `a` and `b` regexes. Matches from the second get regex would have to match `c`, `d`, and `e`, etc..
 
 ## `--order`
 
