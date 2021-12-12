@@ -1,4 +1,4 @@
-import argparse, os, sys, re, glob, mmap, copy, itertools, functools, sre_parse, inspect, json
+import argparse, os, sys, re, glob, mmap, copy, itertools, functools, sre_parse, inspect, json, shutil
 
 """
 	JREP
@@ -80,7 +80,7 @@ class MatchRegexAction(argparse.Action):
 
 class CustomHelpFormatter(argparse.HelpFormatter):
 	def __init__(self, prog, indent_increment=2, max_help_position=24, width=None):
-		argparse.HelpFormatter.__init__(self, prog, indent_increment=2, max_help_position=40, width=None)
+		argparse.HelpFormatter.__init__(self, prog, indent_increment=2, max_help_position=shutil.get_terminal_size().columns//2, width=None)
 
 parser=argparse.ArgumentParser(formatter_class=CustomHelpFormatter)
 parser.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", help="Regex(es) to process matches for")
