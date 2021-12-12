@@ -173,7 +173,8 @@ options:
 
 ## `--order`
 
-- The default value for `--order` is `replace`, `sub`, `match-whole-lines`, `match-regex`, `print-matches`, `no-duplicates`
+- The default value for `--order` is <!--<HELP ORDER>-->`replace`, `sub`, `match-whole-lines`, `match-regex`, `print-name`, `print-matches`, `no-duplicates`
+<!--</HELP ORDER>-->
 
 - Changing the order of `sub`, `replace`, and `match-whole-lines` will work but will make next to no sense
 
