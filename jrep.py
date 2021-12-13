@@ -887,7 +887,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	if _TML!=0 and runData["total"]["totalMatches"]>=_TML:
 		verbose("Total match limit reached; Exiting")
 		break
-	if _TFL!=0 and fileIndex>=_TFL:
+	if _TFL!=0 and runData["total"]["totalFiles"]>=_TFL:
 		verbose("Total file limit reached; Exiting")
 		break
 
