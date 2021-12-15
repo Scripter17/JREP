@@ -194,14 +194,6 @@ def filenameChecker(filename, fullFilename=None):
 		parsedArgs.full_name_ignore_regex,
 	)
 
-def _glob1(dirname, pattern, dir_fd, dironly):
-	names = glob._listdir(dirname, dir_fd, dironly)
-	if not glob._ishidden(pattern):
-		names = (x for x in names if not glob._ishidden(x))
-	for name in names:
-		if fnmatch.fnmatch(name, pattern):
-			yield name
-glob._glob1=_glob1
 doneDir=False
 def _iterdir(dirname, dir_fd, dironly):
 	"""
@@ -291,8 +283,17 @@ def _iterdir(dirname, dir_fd, dironly):
 				os.close(fd)
 	except OSError:
 		return
-
 glob._iterdir=_iterdir
+
+def _glob1(dirname, pattern, dir_fd, dironly):
+	names = _iterdir(dirname, dir_fd, dironly)
+	if not glob._ishidden(pattern):
+		names = (x for x in names if not glob._ishidden(x))
+	for name in names:
+		if fnmatch.fnmatch(name, pattern):
+			verbose(f"Yielding \"{name}\"")
+			yield name
+glob._glob1=_glob1
 
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
 	warn("Error: Length of --replace must be either 1 or equal to the number of regexes")
@@ -768,17 +769,18 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# Handle new directories
 	if lastDir!=currDir:
-		# Print data from last dir (--count)
-		if lastDir is not None:
-			verbose("Just exited a directory; Printing runData...")
-			handleCount(rules=["dir"], runData=runData)
-		# Handle --limit total-dir
-		if _TDL and runData["total"]["totalDirs"]>=_TDL:
-			verbose("Total directory limit reached; Exiting...")
-			break
-		# Handle --print-directories
-		if parsedArgs.print_directories:
-			print(ofmt["dname"].format(dname=processDirName(currDir)))
+		if runData["dir"]["passedFiles"]:
+			# Print data from last dir (--count)
+			if lastDir is not None:
+				verbose("Just exited a directory; Printing runData...")
+				handleCount(rules=["dir"], runData=runData)
+			# Handle --limit total-dir
+			if _TDL and runData["total"]["totalDirs"]>=_TDL:
+				verbose("Total directory limit reached; Exiting...")
+				break
+			# Handle --print-directories
+			if parsedArgs.print_directories:
+				print(ofmt["dname"].format(dname=processDirName(currDir)))
 		# Initialize relevant runData
 		runData["total"]["totalDirs"      ]+=1
 		runData["dir"  ]["totalFiles"     ] =0
