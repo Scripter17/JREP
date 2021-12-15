@@ -1,4 +1,4 @@
-import argparse, os, sys, re, glob, mmap, copy, itertools, functools, sre_parse, inspect, json, shutil
+import argparse, os, sys, re, glob, mmap, copy, itertools, functools, sre_parse, inspect, json, shutil, fnmatch
 
 """
 	JREP
@@ -194,6 +194,14 @@ def filenameChecker(filename, fullFilename=None):
 		parsedArgs.full_name_ignore_regex,
 	)
 
+def _glob1(dirname, pattern, dir_fd, dironly):
+	names = glob._listdir(dirname, dir_fd, dironly)
+	if not glob._ishidden(pattern):
+		names = (x for x in names if not glob._ishidden(x))
+	for name in names:
+		if fnmatch.fnmatch(name, pattern):
+			yield name
+glob._glob1=_glob1
 doneDir=False
 def _iterdir(dirname, dir_fd, dironly):
 	"""
@@ -254,19 +262,29 @@ def _iterdir(dirname, dir_fd, dironly):
 						pass
 				# Yirld files and folders in the right order
 				if parsedArgs.depth_first:
+					verbose("Yielding contents depth first")
+					verbose("Yielding directories")
 					yield from directories
+					verbose("Yeielding files")
 					for file in files:
+						verbose(f"Yielding \"{file}\"")
 						yield file
 						if doneDir:
 							# Optimization for --limit total-dirs
+							verbose("Handling doneDir")
 							doneDir=False
 							break
 				else:
+					verbose("Yielding contents breadth first")
+					verbose("Yeielding files")
 					for file in files:
+						verbose(f"Yielding \"{file}\"")
 						yield file
 						if doneDir:
+							verbose("Handling doneDir")
 							doneDir=False
 							break
+					verbose("Yielding directories")
 					yield from directories
 		finally:
 			if fd is not None:
@@ -489,20 +507,23 @@ def getFiles():
 		"""
 
 		# Files
-		verbose("Yielding files")
+		verbose("Yielding STDIN files")
 		# --stdin-files
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_files:
 			yield from sys.stdin.read().splitlines()
 		# --file
+
+		verbose("Yielding files")
 		yield from parsedArgs.file
 
 		# Globs
-		verbose("Yielding globs")
+		verbose("Yielding STDIN globs")
 		# --stdin-globs
 		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_globs:
 			for pattern in sys.stdin.read().splitlines():
 				yield from glob.iglob(pattern, recursive=True)
 		# --glob
+		verbose("Yielding globs")
 		for pattern in parsedArgs.glob:
 			yield from glob.iglob(pattern, recursive=True)
 
@@ -782,13 +803,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched an ignore regex; Continuing...")
 		continue
 
-	# Handle --limit dir-files and dir-matches
-	# Really slow on big directories
-	# Might eventually have this hook into _iterdir using a global flag or something
-	if (_DFL!=0 and runData["dir"]["totalFiles"]==_DFL) or (_DML!=0 and runData["dir"]["totalMatches"]>=_DML):
-		doneDir=True
-		continue
-
 	# Main matching stuff
 	matchIndex=0 # Just makes stuff easier
 	matchedAny=False
@@ -799,6 +813,10 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			funcs["print-name"](parsedArgs, file, printedName)
 		except PrintedName:
 			printedName=True
+		runData["dir"  ]["passedFiles" ]+=1
+		runData["total"]["passedFiles" ]+=1
+		runData["total"]["totalFiles"  ]+=1
+		runData["dir"  ]["totalFiles"  ]+=1
 
 	for (regexIndex, regex), matchRegexes, matchAntiRegexes in itertools.zip_longest(enumerate(parsedArgs.regex), parsedArgs.match_regex, parsedArgs.match_anti_regex, fillvalue=[]):
 		verbose(f"Handling regex {regexIndex}: {regex}")
@@ -890,6 +908,13 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	if _TFL!=0 and runData["total"]["totalFiles"]>=_TFL:
 		verbose("Total file limit reached; Exiting")
 		break
+
+	# Handle --limit dir-files and dir-matches
+	# Really slow on big directories
+	# Might eventually have this hook into _iterdir using a global flag or something
+	if (_DFL!=0 and runData["dir"]["totalFiles"]>=_DFL) or (_DML!=0 and runData["dir"]["totalMatches"]>=_DML):
+		verbose("Signalling doneDir")
+		doneDir=True
 
 # --dir-match-count and --dir-file count
 if currDir is not None and runData["dir"]["totalMatches"]:
