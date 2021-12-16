@@ -78,6 +78,11 @@ class MatchRegexAction(argparse.Action):
 				ret[-1].append(x.encode())
 		setattr(namespace, self.dest, ret)
 
+class FileRegexAction(argparse.Action):
+	def __call__(self, parser, namespace, values, option_string):
+		values=[x.encode() for x in values]
+		setattr(namespace, self.dest, values)
+
 class CustomHelpFormatter(argparse.HelpFormatter):
 	def __init__(self, prog, indent_increment=2, max_help_position=24, width=None):
 		argparse.HelpFormatter.__init__(self, prog, indent_increment=2, max_help_position=shutil.get_terminal_size().columns//2, width=None)
@@ -108,9 +113,9 @@ parser.add_argument("--dir-full-name-regex"       ,       nargs="+", default=[],
 parser.add_argument("--dir-full-name-anti-regex"  ,       nargs="+", default=[], metavar="Regex", help="Like --dir-name-anti-regex but applied to full directory paths")
 parser.add_argument("--dir-full-name-ignore-regex",       nargs="+", default=[], metavar="Regex", help="Like --dir-full-name-anti-regex but doesn't contribute to --count total-failed-dirs")
 
-parser.add_argument("--file-regex"                ,       nargs="+", default=[], metavar="Regex", help="Regexes to test file contents for")
-parser.add_argument("--file-anti-regex"           ,       nargs="+", default=[], metavar="Regex", help="Like --file-regex but excludes files that match of the supplied regexes")
-parser.add_argument("--file-ignore-regex"         ,       nargs="+", default=[], metavar="Regex", help="Like --file-anti-regex but doesn't contribute to --count *-failed-files")
+parser.add_argument("--file-regex"                ,       nargs="+", default=[], metavar="Regex", action=FileRegexAction, help="Regexes to test file contents for")
+parser.add_argument("--file-anti-regex"           ,       nargs="+", default=[], metavar="Regex", action=FileRegexAction, help="Like --file-regex but excludes files that match of the supplied regexes")
+parser.add_argument("--file-ignore-regex"         ,       nargs="+", default=[], metavar="Regex", action=FileRegexAction, help="Like --file-anti-regex but doesn't contribute to --count *-failed-files")
 
 parser.add_argument("--match-regex"               ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Basically applies str.split(\"*\") to the list of --match-regex. If a match matches all regexes in the Nth --match-regex group (where N is the index of the current get regex) continue processing the match, otherwise move on to the next one")
 parser.add_argument("--match-anti-regex"          ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Like --match-regex but excludes matches that match any of the supplied regexes")
@@ -805,6 +810,20 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched an ignore regex; Continuing...")
 		continue
 
+	fileRegexResult=regexCheckerThing(
+		file["data"],
+		parsedArgs.file_regex,
+		parsedArgs.file_anti_regex,
+		partialIgnore=parsedArgs.file_ignore_regex
+	)
+	if fileRegexResult is False:
+		verbose(f"Contents of file \"{file['name']}\" (\"{os.path.realpath(file['name'])}\") matched a fail regex; Continuing...")
+		runData["dir"  ]["failedFiles"]+=1
+		runData["total"]["failedFiles"]+=1
+		continue
+	elif fileRegexResult is None:
+		verbose(f"Contents of file \"{file['name']}\" (\"{os.path.realpath(file['name'])}\") matched an ignore regex; Continuing...")
+		continue
 	# Main matching stuff
 	matchIndex=0 # Just makes stuff easier
 	matchedAny=False
