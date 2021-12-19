@@ -8,7 +8,7 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, sre_parse,
 	(Can be treated as public domain if your project requires that)
 """
 
-DEFAULTORDER=["replace", "sub", "match-whole-lines", "match-regex", "print-dir", "print-name", "print-matches", "no-duplicates"]
+DEFAULTORDER=["replace", "match-whole-lines", "sub", "match-regex", "no-duplicates", "print-dir", "print-name", "print-matches"]
 
 def parseLCName(name):
 	"""
@@ -788,21 +788,22 @@ def funcPrintName(parsedArgs, file, runData, **kwargs):
 		sys.stdout.buffer.flush()
 	runData["file"]["printedName"]=True
 
-def funcPrintMatches(parsedArgs, file, regexIndex, match, **kwargs):
+def funcPrintMatche(parsedArgs, file, regexIndex, match, **kwargs):
 	"""
 		Handle file name printing
 	"""
-	if match[0] not in runData["matchedStrings"]:
-		if not parsedArgs.dont_print_matches:
-			if parsedArgs.weave_matches:
-				runData["file"]["matches"][regexIndex].append(match)
-			else:
-				printMatch(match, regexIndex)
+	if not parsedArgs.dont_print_matches:
+		if parsedArgs.weave_matches:
+			runData["file"]["matches"][regexIndex].append(match)
+		else:
+			printMatch(match, regexIndex)
 
 def funcNoDuplicates(parsedArgs, match, **kwargs):
 	"""
 		Handle --no-duplicates
 	"""
+	if match[0] in runData["matchedStrings"]:
+		raise NextFile()
 	if parsedArgs.no_duplicates:
 		runData["matchedStrings"].append(match[0])
 
@@ -824,7 +825,7 @@ funcs={
 	"match-whole-lines": funcMatchWholeLines,
 	"match-regex"      : funcMatchRegex,
 	"print-name"       : funcPrintName,
-	"print-matches"    : funcPrintMatches,
+	"print-matches"    : funcPrintMatche,
 	"no-duplicates"    : funcNoDuplicates
 }
 
@@ -908,7 +909,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				runData["total"]["totalFiles"  ]+=1
 				runData["dir"  ]["totalFiles"  ]+=1
 			elif func=="print-dir":
-				funcs["print-dir"](parsedArgs, runData)
+				funcs["print-dir"](parsedArgs, runData, currDir)
 
 	for (regexIndex, regex), matchRegexes, matchAntiRegexes in itertools.zip_longest(enumerate(parsedArgs.regex), parsedArgs.match_regex, parsedArgs.match_anti_regex, fillvalue=[]):
 		verbose(f"Handling regex {regexIndex}: {regex}")
@@ -963,7 +964,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 							runData=runData,
 							parsedArgs=parsedArgs,
 							match=match,
-							currDir=curDir
+							currDir=currDir
 						) or match
 					except NextFile:
 						break
