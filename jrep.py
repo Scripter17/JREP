@@ -79,12 +79,18 @@ class MatchRegexAction(argparse.Action):
 		setattr(namespace, self.dest, ret)
 
 def listRindex(arr, needle):
+	"""
+		str.rindex but for lists. I doubt I need to say much else
+	"""
 	for i in range(len(arr)-1, -1, -1):
 		if arr[i]==needle:
 			return i
 	raise ValueError("Lists not having rindex, find, or rfind is dumb")
 
 def listSplit(arr, needle):
+	"""
+		str.split but for lists. I doubt I need to say much else
+	"""
 	ret=[[]]
 	for x in arr:
 		if x==needle:
@@ -109,8 +115,8 @@ class SubRegexAction(argparse.Action):
 			for subSets in listSplit(regexGroup, "+"):
 				parsed={"tests":[], "antiTests":[], "patterns":[], "repls":[]}
 				thingParts=listSplit(subSets, "?")
-				if len(thingParts)==1: thingParts=[[],            [], thingParts[0]]
-				if len(thingParts)==2: thingParts=[thingParts[0], [], thingParts[1]]
+				if   len(thingParts)==1: thingParts=[[],            [], thingParts[0]]
+				elif len(thingParts)==2: thingParts=[thingParts[0], [], thingParts[1]]
 				parsed["tests"    ]=[x.encode() for x in thingParts[0]      ]
 				parsed["antiTests"]=[x.encode() for x in thingParts[1]      ]
 				parsed["patterns" ]=[x.encode() for x in thingParts[2][0::2]]
@@ -174,6 +180,7 @@ parser.add_argument("--print-match-range"         , "-O", action="store_true"   
 
 parser.add_argument("--replace"                   , "-r", nargs="+", default=[], metavar="Regex", help="Regex replacement")
 parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="re.sub argument pairs after --replace is applied (todo: explain advanced usage here)")
+parser.add_argument("--name-sub"                  ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--sub but for printing file names. Regex group 0 is before processing, group 1 is after")
 parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
 parser.add_argument("--count"                     , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
@@ -703,24 +710,27 @@ def funcReplace(parsedArgs, match, **kwargs):
 		match=delayedSub(replacement.encode(errors="ignore"), match)
 	return match
 
-def funcSub(parsedArgs, match, **kwargs):
+def _funcSub(subRules, match, regexIndex, **kwargs):
 	"""
 		Handle --sub
 		TYSM mCoding for explaining how zip works
 		(zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
 	"""
 
-	if parsedArgs.sub:
-		replaceData=parsedArgs.sub[regexIndex%len(parsedArgs.sub)]
-		print(replaceData)
+	if subRules:
+		replaceData=subRules[regexIndex%len(subRules)]
 		for group in replaceData:
-			if regexCheckerThing(match[0], group["tests"], group["antiTests"]):
+			if regexCheckerThing(match, group["tests"], group["antiTests"]):
 				for pattern, repl in zip(group["patterns"], group["repls"]):
-					match=JSObj({
-						**match,
-						0:re.sub(pattern, repl, match[0])
-					})
+					match=re.sub(pattern, repl, match)
 	return match
+
+def funcSub(parsedArgs, match, regexIndex, **kwargs):
+	return JSObj({
+		**match,
+		0:_funcSub(parsedArgs.sub, match[0], regexIndex, **kwargs)
+	})
+
 
 def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 	"""
@@ -770,7 +780,10 @@ class PrintedName(Exception):
 def funcPrintName(parsedArgs, file, printedName, **kwargs):
 	# Print file name
 	if parsedArgs.print_file_names and not printedName:
-		sys.stdout.buffer.write(ofmt["fname"].format(fname=processFileName(file["name"])).encode())
+		fname=_funcSub(parsedArgs.name_sub, file["name"].encode(), 0).decode()
+		fname=processFileName(fname)
+		fname=_funcSub(parsedArgs.name_sub, fname.encode(), 1).decode()
+		sys.stdout.buffer.write(ofmt["fname"].format(fname=fname).encode())
 		sys.stdout.buffer.write(b"\n")
 		sys.stdout.buffer.flush()
 	raise PrintedName

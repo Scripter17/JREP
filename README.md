@@ -174,7 +174,6 @@ options:
 ## `--order`
 
 - The default value for `--order` is <!--<HELP ORDER>-->`replace`, `sub`, `match-whole-lines`, `match-regex`, `print-name`, `print-matches`, `no-duplicates`
-[{'tests': [], 'antiTests': [], 'patterns': [b'"'], 'repls': [b'`']}]
 <!--</HELP ORDER>-->
 
 - Changing the order of `sub`, `replace`, and `match-whole-lines` will work but will make next to no sense
@@ -189,3 +188,14 @@ When comparing two filenames, it first splits each name into a list of number an
 It then compares the lists element-by-element. If both lists have a number at at a certain index, it'll compare them as numbers, otherwise they'll be compared as strings
 
 TL;DR: If you use numbers in filenames to sort files you don't need to bother with leading zeros
+
+## `--sub` - Advanced usage
+
+The easiest way to explain advanced uses of `--sub` is to give an example. So take `--sub a ? b ? c d e f + x ? y z * ? t ? e d` as an example.  
+What it means is the following:
+
+- If a match from get regex 0 matches `a` and not `b`, replace `c` with `d` and `e` with `f`
+- If a match from get regex 0 matches `x`, replace `y` with `z`
+- If a match from get regex 1 does't match `t`, replace `e` with `d`
+
+Todo: More in-depth explanation instead of the bare minimum
