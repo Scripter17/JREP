@@ -78,6 +78,46 @@ class MatchRegexAction(argparse.Action):
 				ret[-1].append(x.encode())
 		setattr(namespace, self.dest, ret)
 
+def listRindex(arr, needle):
+	for i in range(len(arr)-1, -1, -1):
+		if arr[i]==needle:
+			return i
+	raise ValueError("Lists not having rindex, find, or rfind is dumb")
+
+def listSplit(arr, needle):
+	ret=[[]]
+	for x in arr:
+		if x==needle:
+			ret.append([])
+		else:
+			ret[-1].append(x)
+	return ret
+
+class SubRegexAction(argparse.Action):
+	"""
+		Pre-processor for replacement regexes
+		These options take a list of arguments
+		a ? b ? c d e f + x ? y z * ? t ? e d
+		If a match from get regex 0 matches /a/ and not /b/, replace c with d and e with f
+		If a match from get regex 0 matches /x/, replace y with z
+		If a match from get regex 1 does't match /t/, replace e with d
+	"""
+	def __call__(self, parser, namespace, values, option_string):
+		ret=[]
+		for regexGroup in listSplit(values, "*"):
+			ret.append([])
+			for subSets in listSplit(regexGroup, "+"):
+				parsed={"tests":[], "antiTests":[], "patterns":[], "repls":[]}
+				thingParts=listSplit(subSets, "?")
+				if len(thingParts)==1: thingParts=[[],            [], thingParts[0]]
+				if len(thingParts)==2: thingParts=[thingParts[0], [], thingParts[1]]
+				parsed["tests"    ]=[x.encode() for x in thingParts[0]      ]
+				parsed["antiTests"]=[x.encode() for x in thingParts[1]      ]
+				parsed["patterns" ]=[x.encode() for x in thingParts[2][0::2]]
+				parsed["repls"    ]=[x.encode() for x in thingParts[2][1::2]]
+				ret[-1].append(parsed)
+		setattr(namespace, self.dest, ret)
+
 class FileRegexAction(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string):
 		values=[x.encode() for x in values]
@@ -133,7 +173,7 @@ parser.add_argument("--print-match-offset"        , "-o", action="store_true"   
 parser.add_argument("--print-match-range"         , "-O", action="store_true"                   , help="Print the match range  (implies -o)")
 
 parser.add_argument("--replace"                   , "-r", nargs="+", default=[], metavar="Regex", help="Regex replacement")
-parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", help="re.sub argument pairs after --replace is applied")
+parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="re.sub argument pairs after --replace is applied (todo: explain advanced usage here)")
 parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
 parser.add_argument("--count"                     , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
@@ -599,6 +639,7 @@ _TDL=parsedArgs.limit["td"] if "td" in parsedArgs.limit else 0
 # Tracking stuffs
 currDir=None
 lastDir=None
+printedDirectory=False
 
 runData={
 	"file": {
@@ -668,11 +709,17 @@ def funcSub(parsedArgs, match, **kwargs):
 		TYSM mCoding for explaining how zip works
 		(zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
 	"""
-	for pair in zip(parsedArgs.sub[0::2], parsedArgs.sub[1::2]):
-		match=JSObj({
-			**match,
-			0: re.sub(pair[0].encode(), pair[1].encode(), match[0])
-		})
+
+	if parsedArgs.sub:
+		replaceData=parsedArgs.sub[regexIndex%len(parsedArgs.sub)]
+		print(replaceData)
+		for group in replaceData:
+			if regexCheckerThing(match[0], group["tests"], group["antiTests"]):
+				for pattern, repl in zip(group["patterns"], group["repls"]):
+					match=JSObj({
+						**match,
+						0:re.sub(pattern, repl, match[0])
+					})
 	return match
 
 def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
@@ -783,10 +830,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			if _TDL and runData["total"]["totalDirs"]>=_TDL:
 				verbose("Total directory limit reached; Exiting...")
 				break
-			# Handle --print-directories
-			if parsedArgs.print_directories:
-				print(ofmt["dname"].format(dname=processDirName(currDir)))
 		# Initialize relevant runData
+		printedDirectory=False
 		runData["total"]["totalDirs"      ]+=1
 		runData["dir"  ]["totalFiles"     ] =0
 		runData["dir"  ]["matchesPerRegex"] =[0 for x in parsedArgs.regex]
@@ -874,6 +919,11 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				runData["total"]["totalMatches"   ]            +=1
 				runData["dir"  ]["totalMatches"   ]            +=1
 				runData["file" ]["totalMatches"   ]            +=1
+
+				# Handle --print-directories
+				if parsedArgs.print_directories and not printedDirectory:
+					print(ofmt["dname"].format(dname=processDirName(currDir)))
+					printedDirectory=True
 
 				match=JSObj({
 					0:match[0],
