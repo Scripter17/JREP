@@ -646,10 +646,10 @@ _TDL=parsedArgs.limit["td"] if "td" in parsedArgs.limit else 0
 # Tracking stuffs
 currDir=None
 lastDir=None
-printedDirectory=False
 
 runData={
 	"file": {
+		"printedName":False,
 		"totalMatches":0,
 		"matchesPerRegex":[],
 		"matches":[],
@@ -657,6 +657,7 @@ runData={
 		"failedMatches":[],
 	},
 	"dir":{
+		"printedName":False,
 		"totalFiles":0,
 		"totalMatches":0,
 		"filesPerRegex":[],
@@ -771,22 +772,16 @@ def funcMatchRegex(parsedArgs, match, regexIndex, **kwargs):
 	elif matchRegexResult is None:
 		raise Continue()
 
-class PrintedName(Exception):
-	"""
-		Raised by funcPrintName when a file name is printed
-	"""
-	pass
-
-def funcPrintName(parsedArgs, file, printedName, **kwargs):
+def funcPrintName(parsedArgs, file, runData, **kwargs):
 	# Print file name
-	if parsedArgs.print_file_names and not printedName:
+	if parsedArgs.print_file_names and not runData["file"]["printedName"]:
 		fname=_funcSub(parsedArgs.name_sub, file["name"].encode(), 0).decode()
 		fname=processFileName(fname)
 		fname=_funcSub(parsedArgs.name_sub, fname.encode(), 1).decode()
 		sys.stdout.buffer.write(ofmt["fname"].format(fname=fname).encode())
 		sys.stdout.buffer.write(b"\n")
 		sys.stdout.buffer.flush()
-	raise PrintedName
+	runData["file"]["printedName"]=True
 
 def funcPrintMatches(parsedArgs, file, regexIndex, match, **kwargs):
 	"""
@@ -821,7 +816,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	if file["isDir"]:
 		verbose(f"\"{file['name']}\" is a directory; Continuing")
 		continue
-	printedName=False
+	runData["file"]["printedName"]=False
 
 	runData["file"]["matchesPerRegex"]=[0 for x in parsedArgs.regex]
 	runData["file"]["totalMatches"   ]=0
@@ -844,7 +839,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				verbose("Total directory limit reached; Exiting...")
 				break
 		# Initialize relevant runData
-		printedDirectory=False
+		runData["dir"  ]["printedName"    ] =False
 		runData["total"]["totalDirs"      ]+=1
 		runData["dir"  ]["totalFiles"     ] =0
 		runData["dir"  ]["matchesPerRegex"] =[0 for x in parsedArgs.regex]
@@ -888,10 +883,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# Print file name if there's no get regexes
 	if not parsedArgs.regex:
-		try:
-			funcs["print-name"](parsedArgs, file, printedName)
-		except PrintedName:
-			printedName=True
+		funcs["print-name"](parsedArgs, file, runData)
 		runData["dir"  ]["passedFiles" ]+=1
 		runData["total"]["passedFiles" ]+=1
 		runData["total"]["totalFiles"  ]+=1
@@ -934,9 +926,9 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				runData["file" ]["totalMatches"   ]            +=1
 
 				# Handle --print-directories
-				if parsedArgs.print_directories and not printedDirectory:
+				if parsedArgs.print_directories and not runData["dir"]["printedName"]:
 					print(ofmt["dname"].format(dname=processDirName(currDir)))
-					printedDirectory=True
+					runData["dir"]["printedName"]=True
 
 				match=JSObj({
 					0:match[0],
@@ -952,14 +944,12 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 							regexIndex=regexIndex,
 							regex=regex,
 							file=file,
-							printedName=printedName,
+							runData=runData,
 							parsedArgs=parsedArgs,
 							match=match
 						) or match
 					except Continue:
 						break
-					except PrintedName:
-						printedName=True
 				else:
 					runData["total"]["passedMatches"][regexIndex]+=1
 					runData["dir"  ]["passedMatches"][regexIndex]+=1
@@ -973,7 +963,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		except FloatingPointError as AAAAA:
 			warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
 
-	if parsedArgs.print_non_matching_files and not matchedAny and not printedName:
+	if parsedArgs.print_non_matching_files and not matchedAny and not runData["file"]["printedName"]:
 		verbose(f"\"{file['name']}\" didn't match any file regexes, but --print-non-matching-files was specified")
 		print(ofmt["fname"].format(fname=processFileName(file["name"])))
 
