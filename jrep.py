@@ -603,7 +603,7 @@ def getFiles():
 						except ValueError:
 							mmapFile=b""
 						yield {"name": file, "data": mmapFile, "isDir": False, "stdin": False}
-				except Exception as AAAAA:
+				except OSError as AAAAA:
 					warn(f"Cannot process \"{file}\" because of \"{AAAAA}\"")
 		else:
 			verbose(f"\"{file}\" is a directory")
@@ -751,7 +751,7 @@ def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 		})
 	return match
 
-class Continue(Exception):
+class NextFile(Exception):
 	"""
 		Raised by funcMatchRegex when a match failes the match regex stuff
 	"""
@@ -771,9 +771,9 @@ def funcMatchRegex(parsedArgs, match, regexIndex, **kwargs):
 		runData["total"]["failedMatches"][regexIndex]+=1
 		runData["dir"  ]["failedMatches"][regexIndex]+=1
 		runData["file" ]["failedMatches"][regexIndex]+=1
-		raise Continue()
+		raise NextFile()
 	elif matchRegexResult is None:
-		raise Continue()
+		raise NextFile()
 
 def funcPrintName(parsedArgs, file, runData, **kwargs):
 	"""
@@ -965,7 +965,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 							match=match,
 							currDir=curDir
 						) or match
-					except Continue:
+					except NextFile:
 						break
 				else:
 					runData["total"]["passedMatches"][regexIndex]+=1
@@ -977,7 +977,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				   (_TML and runData["total"]["totalMatches"]>=_TML):
 					break
 
-		except FloatingPointError as AAAAA:
+		except Exception as AAAAA:
 			warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
 
 	if parsedArgs.print_non_matching_files and not matchedAny and not runData["file"]["printedName"]:
@@ -1008,10 +1008,10 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		verbose("Signalling doneDir")
 		doneDir=True
 
-# --dir-match-count and --dir-file count
+# --count dir-*
 if currDir is not None and runData["dir"]["totalMatches"]:
 	# Only runs if files were handled in two or more directories
 	handleCount(rules=["dir"], runData=runData)
 
-# --total-match-count, --total-file-count, and --total-dir-count
+# --count total-*
 handleCount(rules=["total"], runData=runData)
