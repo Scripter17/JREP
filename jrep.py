@@ -181,7 +181,7 @@ parser.add_argument("--print-match-range"         , "-O", action="store_true"   
 parser.add_argument("--replace"                   , "-r", nargs="+", default=[], metavar="Regex", help="Regex replacement")
 parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="re.sub argument pairs after --replace is applied (todo: explain advanced usage here)")
 parser.add_argument("--name-sub"                  ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--sub but for printing file names. Regex group 0 is before processing, group 1 is after")
-parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
+#parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
 parser.add_argument("--count"                     , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
 parser.add_argument("--limit"                     , "-l", nargs="+", default={}, action=LimitAction, help="Limit match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
@@ -352,9 +352,9 @@ if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedAr
 	exit(1)
 
 # Simple implementation of --escape
-if parsedArgs.escape:
-	parsedArgs.sub.extend(["\\", "\\\\", "\r", "\\r", "\n", "\\n"])
-	verbose("Added --escape args to --sub; --sub is now", parsedArgs.sub)
+#if parsedArgs.escape:
+#	parsedArgs.sub.extend(["\\", "\\\\", "\r", "\\r", "\n", "\\n"])
+#	verbose("Added --escape args to --sub; --sub is now", parsedArgs.sub)
 
 # Dumb output fstring generation stuff
 _header=not parsedArgs.no_headers
