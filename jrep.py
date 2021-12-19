@@ -8,7 +8,7 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, sre_parse,
 	(Can be treated as public domain if your project requires that)
 """
 
-DEFAULTORDER=["replace", "sub", "match-whole-lines", "match-regex", "print-name", "print-matches", "no-duplicates"]
+DEFAULTORDER=["replace", "sub", "match-whole-lines", "match-regex", "print-dir", "print-name", "print-matches", "no-duplicates"]
 
 def parseLCName(name):
 	"""
@@ -181,6 +181,7 @@ parser.add_argument("--print-match-range"         , "-O", action="store_true"   
 parser.add_argument("--replace"                   , "-r", nargs="+", default=[], metavar="Regex", help="Regex replacement")
 parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="re.sub argument pairs after --replace is applied (todo: explain advanced usage here)")
 parser.add_argument("--name-sub"                  ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--sub but for printing file names. Regex group 0 is before processing, group 1 is after")
+parser.add_argument("--dir-name-sub"              ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--name-sub but for directory names")
 #parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
 
 parser.add_argument("--count"                     , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
@@ -713,7 +714,7 @@ def funcReplace(parsedArgs, match, **kwargs):
 
 def _funcSub(subRules, match, regexIndex, **kwargs):
 	"""
-		Handle --sub
+		Handle --sub, --name-sub, and --dir-name-sub
 		TYSM mCoding for explaining how zip works
 		(zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
 	"""
@@ -727,11 +728,13 @@ def _funcSub(subRules, match, regexIndex, **kwargs):
 	return match
 
 def funcSub(parsedArgs, match, regexIndex, **kwargs):
+	"""
+		Handle --sub
+	"""
 	return JSObj({
 		**match,
 		0:_funcSub(parsedArgs.sub, match[0], regexIndex, **kwargs)
 	})
-
 
 def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 	"""
@@ -773,7 +776,9 @@ def funcMatchRegex(parsedArgs, match, regexIndex, **kwargs):
 		raise Continue()
 
 def funcPrintName(parsedArgs, file, runData, **kwargs):
-	# Print file name
+	"""
+		Print file name
+	"""
 	if parsedArgs.print_file_names and not runData["file"]["printedName"]:
 		fname=_funcSub(parsedArgs.name_sub, file["name"].encode(), 0).decode()
 		fname=processFileName(fname)
@@ -801,7 +806,19 @@ def funcNoDuplicates(parsedArgs, match, **kwargs):
 	if parsedArgs.no_duplicates:
 		runData["matchedStrings"].append(match[0])
 
+def funcPrintDir(parsedArgs, runData, currDir, **kwargs):
+	"""
+		Handle --print-directories
+	"""
+	if parsedArgs.print_directories and not runData["dir"]["printedName"]:
+		dname=_funcSub(parsedArgs.dir_name_sub, currDir.encode(), 0).decode()
+		dname=processDirName(dname)
+		dname=_funcSub(parsedArgs.dir_name_sub, dname.encode(), 1).decode()
+		print(ofmt["dname"].format(dname=dname))
+		runData["dir"]["printedName"]=True
+
 funcs={
+	"print-dir"        : funcPrintDir,
 	"replace"          : funcReplace,
 	"sub"              : funcSub,
 	"match-whole-lines": funcMatchWholeLines,
@@ -847,8 +864,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		runData["dir"  ]["totalMatches"   ] =0
 		runData["dir"  ]["failedFiles"    ] =0
 		runData["dir"  ]["passedFiles"    ] =0
-		runData["dir"  ]["passedMatches"  ]=[0 for x in parsedArgs.regex]
-		runData["dir"  ]["failedMatches"  ]=[0 for x in parsedArgs.regex]
+		runData["dir"  ]["passedMatches"  ] =[0 for x in parsedArgs.regex]
+		runData["dir"  ]["failedMatches"  ] =[0 for x in parsedArgs.regex]
 
 	# Handle name fail regexes
 	# It has to be done here to make sure runData["dir"] doesn't miss stuff
@@ -881,13 +898,17 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	matchIndex=0 # Just makes stuff easier
 	matchedAny=False
 
-	# Print file name if there's no get regexes
+	# Handle printing file and dir names when there's no regexes
 	if not parsedArgs.regex:
-		funcs["print-name"](parsedArgs, file, runData)
-		runData["dir"  ]["passedFiles" ]+=1
-		runData["total"]["passedFiles" ]+=1
-		runData["total"]["totalFiles"  ]+=1
-		runData["dir"  ]["totalFiles"  ]+=1
+		for func in parsedArgs.order:
+			if func=="print-name":
+				funcs["print-name"](parsedArgs, file, runData)
+				runData["dir"  ]["passedFiles" ]+=1
+				runData["total"]["passedFiles" ]+=1
+				runData["total"]["totalFiles"  ]+=1
+				runData["dir"  ]["totalFiles"  ]+=1
+			elif func=="print-dir":
+				funcs["print-dir"](parsedArgs, runData)
 
 	for (regexIndex, regex), matchRegexes, matchAntiRegexes in itertools.zip_longest(enumerate(parsedArgs.regex), parsedArgs.match_regex, parsedArgs.match_anti_regex, fillvalue=[]):
 		verbose(f"Handling regex {regexIndex}: {regex}")
@@ -925,11 +946,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				runData["dir"  ]["totalMatches"   ]            +=1
 				runData["file" ]["totalMatches"   ]            +=1
 
-				# Handle --print-directories
-				if parsedArgs.print_directories and not runData["dir"]["printedName"]:
-					print(ofmt["dname"].format(dname=processDirName(currDir)))
-					runData["dir"]["printedName"]=True
-
 				match=JSObj({
 					0:match[0],
 					**dict(enumerate(match.groups(), start=1)),
@@ -946,7 +962,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 							file=file,
 							runData=runData,
 							parsedArgs=parsedArgs,
-							match=match
+							match=match,
+							currDir=curDir
 						) or match
 					except Continue:
 						break
@@ -965,7 +982,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	if parsedArgs.print_non_matching_files and not matchedAny and not runData["file"]["printedName"]:
 		verbose(f"\"{file['name']}\" didn't match any file regexes, but --print-non-matching-files was specified")
-		print(ofmt["fname"].format(fname=processFileName(file["name"])))
+		#print(ofmt["fname"].format(fname=processFileName(file["name"])))
+		funcPrintName(parsedArgs, file, runData)
 
 	if parsedArgs.weave_matches:
 		f=zip if parsedArgs.strict_weave else itertools.zip_longest
