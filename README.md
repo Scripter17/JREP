@@ -1,8 +1,10 @@
 # JREP
 
-JREP is a general-purpose command line utility that takes the basic concept of GREP and transforms it into an infinitely more versatile tool fit for the modern world  
+JREP is a general-purpose command line utility that takes the basic concept of GREP and transforms it into an infinitely more versatile tool fit for the modern world.
 
-Until I can make a proper README, here's the output of `jrep --help`  
+Basically I couldn't find a good GREP for windows and GREP itself kinda sucks so I did it myself. Excpect dumb bodges and messy code despite my efforts to keep both to a minimum.
+
+The current output of `jrep --help`:  
 For details, [check below](#details)
 
 <!--<HELP MSG>-->
@@ -42,15 +44,18 @@ usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
 
 positional arguments:
   Regex                                 Regex(es) to process matches for
+                                        (reffered to as "get regexes")
 
 options:
   -h, --help                            show this help message and exit
-  --string, -s                          Test for strings instead of regex
-  --no-duplicates, -D                   Don't print duplicate matches
+  --string, -s                          Treat get regexes as strings. Doesn't
+                                        apply to any other options.
+  --no-duplicates, -D                   Don't print duplicate matches (See
+                                        also: --order)
   --file FILE [FILE ...], -f FILE [FILE ...]
-                                        The file(s) to check
+                                        A list of files to check
   --glob GLOB [GLOB ...], -g GLOB [GLOB ...]
-                                        The glob(s) to check
+                                        A list of globs to check
   --stdin-files, -F                     Treat STDIN as a list of files
   --stdin-globs, -G                     Treat STDIN as a list of globs
   --name-regex Regex [Regex ...], -t Regex [Regex ...]
@@ -117,8 +122,7 @@ options:
   --sort SORT, -S SORT                  Sort files by ctime, mtime, atime,
                                         name, or size. Prefix key with "r" to
                                         reverse. A windows-esque "blockwise"
-                                        sort is also available (todo:
-                                        document)
+                                        sort is also available (see README)
   --sort-regex Regex [Regex ...]        Regexes to apply to file names keys
                                         (like --replace) for purposes of
                                         sorting (EXPERIMENTAL)
@@ -127,11 +131,16 @@ options:
   --print-directories, -d               Print names of explored directories
   --print-file-names, -n                Print file names as well as matches
   --print-full-paths, -p                Print full file paths
-  --print-posix-paths, -P               Print replace \ with / in file paths
+  --print-posix-paths, -P               Replace \ with / when printing file
+                                        paths
   --dont-print-matches, -N              Don't print matches (use with --print-
                                         file-names to only print names)
-  --print-match-offset, -o              Print the match offset (ignores -H)
-  --print-match-range, -O               Print the match range (implies -o)
+  --print-match-offset, -o              Print where the match starts in the
+                                        file as a hexadecimal number (ignores
+                                        -H)
+  --print-match-range, -O               Print where the match starts and ends
+                                        in the file as a hexadecimal number
+                                        (implies -o)
   --replace Regex [Regex ...], -r Regex [Regex ...]
                                         Regex replacement
   --sub Regex [Regex ...], -R Regex [Regex ...]
@@ -139,8 +148,9 @@ options:
                                         is applied (todo: explain advanced
                                         usage here)
   --name-sub Regex [Regex ...]          --sub but for printing file names.
-                                        Regex group 0 is before processing,
-                                        group 1 is after
+                                        Regex group 0 is before --print-full-
+                                        paths and --print-posix-paths, group 1
+                                        is after
   --dir-name-sub Regex [Regex ...]      --name-sub but for directory names
   --count COUNT [COUNT ...], -c COUNT [COUNT ...]
                                         Count match/file/dir per file, dir,
@@ -153,17 +163,17 @@ options:
   --print-run-data                      Print raw runData JSON
   --depth-first                         Enter subdirectories before processing
                                         files
-  --glob-root-dir GLOB_ROOT_DIR         Root dir to run globs in
-                                        (EXPERIMENTAL)
+  --glob-root-dir GLOB_ROOT_DIR         Root dir to run globs in (JANK)
   --match-whole-lines                   Match whole lines like FINDSTR
   --print-non-matching-files            Print file names with no matches
+                                        (Partially broken)
   --no-warn                             Don't print warning messages
   --weave-matches, -w                   Weave regex matchdes (print first
                                         results for each get regex, then
                                         second results, etc.)
-  --strict-weave, -W                    Only print full match sets
+  --strict-weave, -W                    Only print full weave sets
   --order ORDER [ORDER ...]             The order in which modifications to
-                                        matches are applied
+                                        matches are applied (see README)
   --verbose, -v                         Verbose info
 
 ```
@@ -195,11 +205,15 @@ TL;DR: If you use numbers in filenames to sort files you don't need to bother wi
 
 ## `--sub` - Advanced usage
 
-The easiest way to explain advanced uses of `--sub` is to give an example. So take `--sub a ? b ? c d e f + x ? y z * ? t ? e d` as an example.  
+The easiest way to explain advanced uses of `--sub` is to give an example. So take `--sub a ? b ? c d e f + x ? y z * ? t ? e d * abc xyz` as an example.  
 What it means is the following:
 
-- If a match from get regex 0 matches `a` and not `b`, replace `c` with `d` and `e` with `f`
-- If a match from get regex 0 matches `x`, replace `y` with `z`
-- If a match from get regex 1 does't match `t`, replace `e` with `d`
+- `a ? b ? c d e f`: If a match from get regex 0 matches `a` and not `b`, replace `c` with `d` and `e` with `f`
+- `+`: New conditions but stay on the same get regex
+- `x ? y z`: If a match from get regex 0 matches `x`, replace `y` with `z`
+- `*`: Move on to the next get regex
+- `? t ? e d`: If a match from get regex 1 does't match `t`, replace `e` with `d`
+- `*`: Move on to the next get regex
+- `abc xyz`: Replace `abc` with `xyz` without any conditions
 
-Todo: More in-depth explanation instead of the bare minimum
+Obviously 99% of use cases don't need conditionals at all so just doing `--sub abc def * uvw xyz` is sufficient
