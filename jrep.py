@@ -192,7 +192,7 @@ parser.add_argument("--depth-first"               ,       action="store_true"   
 parser.add_argument("--glob-root-dir"             ,                                                  help="Root dir to run globs in (JANK)")
 
 parser.add_argument("--match-whole-lines"         ,       action="store_true"                      , help="Match whole lines like FINDSTR")
-parser.add_argument("--print-non-matching-files"  ,       action="store_true"                      , help="Print file names with no matches (Partially broken)")
+#parser.add_argument("--print-non-matching-files"  ,       action="store_true"                      , help="Print file names with no matches (Partially broken)")
 parser.add_argument("--no-warn"                   ,       action="store_true"                      , help="Don't print warning messages")
 parser.add_argument("--weave-matches"             , "-w", action="store_true"                      , help="Weave regex matchdes (print first results for each get regex, then second results, etc.)")
 parser.add_argument("--strict-weave"              , "-W", action="store_true"                      , help="Only print full weave sets")
@@ -834,8 +834,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	if file["isDir"]:
 		verbose(f"\"{file['name']}\" is a directory; Continuing")
 		continue
-	runData["file"]["printedName"]=False
 
+	runData["file"]["printedName"]=False
 	runData["file"]["matchesPerRegex"]=[0 for x in parsedArgs.regex]
 	runData["file"]["totalMatches"   ]=0
 	runData["file"]["passedMatches"  ]=[0 for x in parsedArgs.regex]
@@ -981,10 +981,10 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		except Exception as AAAAA:
 			warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
 
-	if parsedArgs.print_non_matching_files and not matchedAny and not runData["file"]["printedName"]:
-		verbose(f"\"{file['name']}\" didn't match any file regexes, but --print-non-matching-files was specified")
-		#print(ofmt["fname"].format(fname=processFileName(file["name"])))
-		funcPrintName(parsedArgs, file, runData)
+	#if parsedArgs.print_non_matching_files and not matchedAny and not runData["file"]["printedName"]:
+	#	verbose(f"\"{file['name']}\" didn't match any file regexes, but --print-non-matching-files was specified")
+	#	#print(ofmt["fname"].format(fname=processFileName(file["name"])))
+	#	funcPrintName(parsedArgs, file, runData)
 
 	if parsedArgs.weave_matches:
 		f=zip if parsedArgs.strict_weave else itertools.zip_longest
