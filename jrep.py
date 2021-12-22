@@ -42,26 +42,7 @@ class CountAction(argparse.Action):
 		Pre-processor for --count targets
 	"""
 	def __call__(self, parser, namespace, values, option_string):
-		ret=[]
-		"""for value in values:
-			value=parseLCName(value) or value
-			if   value=="all"       : values.extend(["alltot", "allreg"])
-			elif value=="alltot"    : values.extend(["totaltot", "dirtot", "filetot"])
-			elif value=="allreg"    : values.extend(["totalreg", "dirreg", "filereg"])
-			elif value=="total"     : values.extend(["totaltot", "totalreg"])
-			elif value=="totaltot"  : values.extend(["tmtot"   , "tftot" , "tdtot"  ])
-			elif value=="totalreg"  : values.extend(["tmreg"   , "tfreg" , "tdreg"  ])
-			elif value=="dir"       : values.extend(["dirtot", "dirreg"])
-			elif value=="dirtot"    : values.extend(["dmtot"   , "dftot"            ])
-			elif value=="dirreg"    : values.extend(["dmreg"   , "dfreg"            ])
-			elif value=="file"      : values.extend(["filetot", "filereg"])
-			elif value=="filetot"   : values.extend(["fmtot"                        ])
-			elif value=="filereg"   : values.extend(["fmreg"                        ])
-			elif value not in values: values.append(value)
-		print(values)"""
-		for value in values:
-			ret.append(parseLCName(value))
-		setattr(namespace, self.dest, ret)
+		setattr(namespace, self.dest, list(map(parseLCName, values)))
 
 class MatchRegexAction(argparse.Action):
 	"""
@@ -182,7 +163,7 @@ parser.add_argument("--replace"                   , "-r", nargs="+", default=[],
 parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="re.sub argument pairs after --replace is applied (todo: explain advanced usage here)")
 parser.add_argument("--name-sub"                  ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--sub but for printing file names. Regex group 0 is before --print-full-paths and --print-posix-paths, group 1 is after")
 parser.add_argument("--dir-name-sub"              ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--name-sub but for directory names")
-#parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Replace \\, carriage returns, and newlines with \\\\, \\r, and \\n")
+parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Escape back slashes, newlines, carriage returns, and non-printable characters")
 
 parser.add_argument("--count"                     , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
 parser.add_argument("--limit"                     , "-l", nargs="+", default={}, action=LimitAction, help="Limit match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
@@ -307,29 +288,19 @@ def _iterdir(dirname, dir_fd, dironly):
 						pass
 				# Yirld files and folders in the right order
 				if parsedArgs.depth_first:
-					verbose("Yielding contents depth first")
-					verbose("Yielding directories")
 					yield from directories
-					verbose("Yeielding files")
 					for file in files:
-						verbose(f"Yielding \"{file}\"")
 						yield file
 						if doneDir:
 							# Optimization for --limit total-dirs
-							verbose("Handling doneDir")
 							doneDir=False
 							break
 				else:
-					verbose("Yielding contents breadth first")
-					verbose("Yeielding files")
 					for file in files:
-						verbose(f"Yielding \"{file}\"")
 						yield file
 						if doneDir:
-							verbose("Handling doneDir")
 							doneDir=False
 							break
-					verbose("Yielding directories")
 					yield from directories
 		finally:
 			if fd is not None:
@@ -351,11 +322,6 @@ glob._glob1=_glob1
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
 	warn("Error: Length of --replace must be either 1 or equal to the number of regexes")
 	exit(1)
-
-# Simple implementation of --escape
-#if parsedArgs.escape:
-#	parsedArgs.sub.extend(["\\", "\\\\", "\r", "\\r", "\n", "\\n"])
-#	verbose("Added --escape args to --sub; --sub is now", parsedArgs.sub)
 
 # Dumb output fstring generation stuff
 _header=not parsedArgs.no_headers
@@ -628,11 +594,18 @@ def processDirName(dname):
 	if parsedArgs.print_posix_paths: dname=dname.replace("\\", "/")
 	return dname
 
+def escape(match):
+	if parsedArgs.escape:
+		ret=match.replace(b"\\", b"\\\\").replace(b"\r", b"\\r").replace(b"\n", b"\\n")
+		ret=re.sub(rb"[\x00-\x1f\x80-\xff]", lambda x:(f"\\x{ord(x[0]):02x}".encode()), ret)
+		return ret
+	return match
+
 def printMatch(match, regexIndex):
 	if match==None:
 		return
 	sys.stdout.buffer.write(ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
-	sys.stdout.buffer.write(match[0])
+	sys.stdout.buffer.write(escape(match[0]))
 	sys.stdout.buffer.write(b"\n")
 	sys.stdout.buffer.flush()
 
@@ -788,7 +761,7 @@ def funcPrintName(parsedArgs, file, runData, **kwargs):
 		sys.stdout.buffer.flush()
 	runData["file"]["printedName"]=True
 
-def funcPrintMatche(parsedArgs, file, regexIndex, match, **kwargs):
+def funcPrintMatches(parsedArgs, file, regexIndex, match, **kwargs):
 	"""
 		Handle file name printing
 	"""
@@ -825,7 +798,7 @@ funcs={
 	"match-whole-lines": funcMatchWholeLines,
 	"match-regex"      : funcMatchRegex,
 	"print-name"       : funcPrintName,
-	"print-matches"    : funcPrintMatche,
+	"print-matches"    : funcPrintMatches,
 	"no-duplicates"    : funcNoDuplicates
 }
 
@@ -895,6 +868,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	elif fileRegexResult is None:
 		verbose(f"Contents of file \"{file['name']}\" (\"{os.path.realpath(file['name'])}\") matched an ignore regex; Continuing...")
 		continue
+
 	# Main matching stuff
 	matchIndex=0 # Just makes stuff easier
 	matchedAny=False
@@ -1006,7 +980,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	# Really slow on big directories
 	# Might eventually have this hook into _iterdir using a global flag or something
 	if (_DFL!=0 and runData["dir"]["totalFiles"]>=_DFL) or (_DML!=0 and runData["dir"]["totalMatches"]>=_DML):
-		verbose("Signalling doneDir")
+		verbose("Dir limit(s) reached")
 		doneDir=True
 
 # --count dir-*

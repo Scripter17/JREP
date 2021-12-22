@@ -35,8 +35,9 @@ usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
                [--print-match-offset] [--print-match-range]
                [--replace Regex [Regex ...]] [--sub Regex [Regex ...]]
                [--name-sub Regex [Regex ...]]
-               [--dir-name-sub Regex [Regex ...]] [--count COUNT [COUNT ...]]
-               [--limit LIMIT [LIMIT ...]] [--print-run-data] [--depth-first]
+               [--dir-name-sub Regex [Regex ...]] [--escape]
+               [--count COUNT [COUNT ...]] [--limit LIMIT [LIMIT ...]]
+               [--print-run-data] [--depth-first]
                [--glob-root-dir GLOB_ROOT_DIR] [--match-whole-lines]
                [--no-warn] [--weave-matches] [--strict-weave]
                [--order ORDER [ORDER ...]] [--verbose]
@@ -152,6 +153,9 @@ options:
                                         paths and --print-posix-paths, group 1
                                         is after
   --dir-name-sub Regex [Regex ...]      --name-sub but for directory names
+  --escape, -e                          Escape back slashes, newlines,
+                                        carriage returns, and non-printable
+                                        characters
   --count COUNT [COUNT ...], -c COUNT [COUNT ...]
                                         Count match/file/dir per file, dir,
                                         and/or total (Ex: --count fm dir-
