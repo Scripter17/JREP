@@ -39,8 +39,8 @@ usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
                [--count COUNT [COUNT ...]] [--limit LIMIT [LIMIT ...]]
                [--print-run-data] [--depth-first]
                [--glob-root-dir GLOB_ROOT_DIR] [--match-whole-lines]
-               [--no-warn] [--weave-matches] [--strict-weave]
-               [--order ORDER [ORDER ...]] [--verbose]
+               [--print-non-matching-files] [--no-warn] [--weave-matches]
+               [--strict-weave] [--order ORDER [ORDER ...]] [--verbose]
                [Regex ...]
 
 positional arguments:
@@ -169,6 +169,8 @@ options:
                                         files
   --glob-root-dir GLOB_ROOT_DIR         Root dir to run globs in (JANK)
   --match-whole-lines                   Match whole lines like FINDSTR
+  --print-non-matching-files            Print file names with no matches
+                                        (Partially broken)
   --no-warn                             Don't print warning messages
   --weave-matches, -w                   Weave regex matchdes (print first
                                         results for each get regex, then
@@ -189,8 +191,7 @@ options:
 
 ## `--order`
 
-- The default value for `--order` is <!--<HELP ORDER>-->`replace`, `match-whole-lines`, `sub`, `match-regex`, `no-duplicates`, `print-dir`, `print-name`, `print-matches`
-<!--</HELP ORDER>-->
+- The default value for `--order` is <!--<HELP ORDER>--><!--</HELP ORDER>-->
 
 - Changing the order of `sub`, `replace`, and `match-whole-lines` will work but will make next to no sense
 

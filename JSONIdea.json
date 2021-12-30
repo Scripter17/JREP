@@ -1,0 +1,31 @@
+{
+	"time":1640478964.1195621,
+	"globs":["*"],
+	"files":[],
+	"root-dir":"C:/",
+	"insert-all-the-other-cli-options-here":"",
+	"output":{
+		"directories":[
+			{
+				"name":"a",
+				"directories":[],
+				"files":[
+					{
+						"name":"aaa.py",
+						"matches":[
+							{
+								"match":"abcdefg",
+								"span":[0,6]
+							}
+						]
+					}
+				]
+			},
+			{
+				"name":"b",
+				"directories":[]
+			}
+		],
+		"files":[]
+	}
+}
