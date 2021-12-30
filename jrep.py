@@ -17,7 +17,7 @@ class JSObj:
 		This class mimicks that
 	"""
 	def __init__(self, obj, default=None):
-		object.__setattr__(self, "obj"    , copy.copy(obj))
+		object.__setattr__(self, "obj"    , obj)
 		object.__setattr__(self, "default", default)
 
 	def __getattr__(self, key):      return self.obj[key] if key in self.obj else self.default
@@ -190,9 +190,9 @@ parser.add_argument("--name-sub"                  ,       nargs="+", default=[],
 parser.add_argument("--dir-name-sub"              ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--name-sub but for directory names")
 parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Escape back slashes, newlines, carriage returns, and non-printable characters")
 
-parser.add_argument("--count"                     , "-c", nargs="+", default=[], action=CountAction, help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
-parser.add_argument("--limit"                     , "-l", nargs="+", default={}, action=LimitAction, help="Limit match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
-parser.add_argument("--print-run-data"            ,       action="store_true"                      , help="Print raw runData JSON")
+parser.add_argument("--count"                     , "-c", nargs="+", default=[]                  , action=CountAction , help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
+parser.add_argument("--limit"                     , "-l", nargs="+", default=JSObj({}, default=0), action=LimitAction , help="Limit match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
+parser.add_argument("--print-run-data"            ,                                                action="store_true", help="Print raw runData JSON")
 
 parser.add_argument("--depth-first"               ,       action="store_true"                      , help="Enter subdirectories before processing files")
 parser.add_argument("--glob-root-dir"             ,                                                  help="Root dir to run globs in (JANK)")
