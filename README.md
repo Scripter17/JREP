@@ -17,6 +17,12 @@ usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
                [--full-name-regex Regex [Regex ...]]
                [--full-name-anti-regex Regex [Regex ...]]
                [--full-name-ignore-regex Regex [Regex ...]]
+               [--name-glob Glob [Glob ...]]
+               [--name-anti-glob Glob [Glob ...]]
+               [--name-ignore-glob Glob [Glob ...]]
+               [--full-name-glob Glob [Glob ...]]
+               [--full-name-anti-glob Glob [Glob ...]]
+               [--full-name-ignore-glob Glob [Glob ...]]
                [--dir-name-regex Regex [Regex ...]]
                [--dir-name-anti-regex Regex [Regex ...]]
                [--dir-name-ignore-regex Regex [Regex ...]]
@@ -79,6 +85,21 @@ options:
                                         Like --full-name-anti-regex but
                                         doesn't contribute to --count
                                         *-failed-files
+  --name-glob Glob [Glob ...]           If a file name matches all supplied
+                                        globs, keep going. Otherwise continue
+  --name-anti-glob Glob [Glob ...]      Like --name-glob but excludes file
+                                        names that match any of the supplied
+                                        globs
+  --name-ignore-glob Glob [Glob ...]    Like --name-anti-glob but doesn't
+                                        contribute to --count *-failed-files
+  --full-name-glob Glob [Glob ...]      Like --name-glob but for absolute file
+                                        paths (C:/xyz instead of xyz)
+  --full-name-anti-glob Glob [Glob ...]
+                                        Like --name-anti-glob but applied to
+                                        full file paths
+  --full-name-ignore-glob Glob [Glob ...]
+                                        Like --full-name-anti-glob but doesn't
+                                        contribute to --count *-failed-files
   --dir-name-regex Regex [Regex ...]    If a directory name matches all
                                         supplied regexes, enter it. Otherwise
                                         continue

@@ -31,6 +31,7 @@ class JSObj:
 	def keys(self): return self.obj.keys() # Makes **JSObj work
 
 def _LCNameRegexPart(*opts):
+	# Helper function for generating the --limiy/--count parser regex
 	return "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
 _LCNameRegex=_LCNameRegexPart(r"files?"              , r"dir(?:ectori(?:es|y))?", r"total"                 )    +r"[-_]?"+\
              _LCNameRegexPart(r"match(?:e?s)?"       , r"files?"                , r"dir(?:ectori(?:es|y))?")    +r"[-_]?"+\
@@ -158,6 +159,13 @@ parser.add_argument("--full-name-regex"           ,       nargs="+", default=[],
 parser.add_argument("--full-name-anti-regex"      ,       nargs="+", default=[], metavar="Regex", help="Like --name-anti-regex but applied to full file paths")
 parser.add_argument("--full-name-ignore-regex"    ,       nargs="+", default=[], metavar="Regex", help="Like --full-name-anti-regex but doesn't contribute to --count *-failed-files")
 
+parser.add_argument("--name-glob"                 ,       nargs="+", default=[], metavar="Glob" , help="If a file name matches all supplied globs, keep going. Otherwise continue")
+parser.add_argument("--name-anti-glob"            ,       nargs="+", default=[], metavar="Glob" , help="Like --name-glob but excludes file names that match any of the supplied globs")
+parser.add_argument("--name-ignore-glob"          ,       nargs="+", default=[], metavar="Glob" , help="Like --name-anti-glob but doesn't contribute to --count *-failed-files")
+parser.add_argument("--full-name-glob"            ,       nargs="+", default=[], metavar="Glob" , help="Like --name-glob but for absolute file paths (C:/xyz instead of xyz)")
+parser.add_argument("--full-name-anti-glob"       ,       nargs="+", default=[], metavar="Glob" , help="Like --name-anti-glob but applied to full file paths")
+parser.add_argument("--full-name-ignore-glob"     ,       nargs="+", default=[], metavar="Glob" , help="Like --full-name-anti-glob but doesn't contribute to --count *-failed-files")
+
 parser.add_argument("--dir-name-regex"            ,       nargs="+", default=[], metavar="Regex", help="If a directory name matches all supplied regexes, enter it. Otherwise continue")
 parser.add_argument("--dir-name-anti-regex"       ,       nargs="+", default=[], metavar="Regex", help="Like --dir-name-regex but excludes directories that match any of the supplied regexes")
 parser.add_argument("--dir-name-ignore-regex"     ,       nargs="+", default=[], metavar="Regex", help="Like --dir-name-anti-regex but doesn't contribute to --count total-failed-dirs")
@@ -243,11 +251,28 @@ def regexCheckerThing(partial, partialPass, partialFail, full="", fullPass=[], f
 		return True
 	return False
 
+def globCheckerThing(partial, partialPass, partialFail, full="", fullPass=[], fullFail=[], partialIgnore=[], fullIgnore=[]):
+	"""
+		True  = Passed
+		False = Failed
+		None  = Ignored
+	"""
+	if any(map(lambda x:fnmatch.fnmatch(partial, x), partialIgnore)) or\
+	   any(map(lambda x:fnmatch.fnmatch(full   , x), fullIgnore   )):
+		return None
+	if any(map(lambda x:fnmatch.fnmatch(partial, x), partialFail)) or\
+	   any(map(lambda x:fnmatch.fnmatch(full   , x), fullFail   )):
+		return False
+	if all(map(lambda x:fnmatch.fnmatch(partial, x), partialPass)) and\
+	   all(map(lambda x:fnmatch.fnmatch(full   , x), fullPass   )):
+		return True
+	return False
+
 def filenameChecker(filename, fullFilename=None):
 	"""
 		Shorthand for handling filenames with regexCheckerThing
 	"""
-	return regexCheckerThing(
+	r=regexCheckerThing(
 		filename,
 		parsedArgs.name_regex,
 		parsedArgs.name_anti_regex,
@@ -257,6 +282,19 @@ def filenameChecker(filename, fullFilename=None):
 		parsedArgs.name_ignore_regex,
 		parsedArgs.full_name_ignore_regex,
 	)
+	g=globCheckerThing(
+		filename,
+		parsedArgs.name_glob,
+		parsedArgs.name_anti_glob,
+		fullFilename or os.path.realpath(filename),
+		parsedArgs.full_name_glob,
+		parsedArgs.full_name_anti_glob,
+		parsedArgs.name_ignore_glob,
+		parsedArgs.full_name_ignore_glob,
+	)
+	if False in [r,g]: return False
+	if None  in [r,g]: return None
+	return True
 
 doneDir=False
 def _iterdir(dirname, dir_fd, dironly):
@@ -595,10 +633,10 @@ def getFiles():
 			yield {"name": file, "isDir": True, "stdin": False}
 
 def processFileName(fname):
-	fname=_funcSub(parsedArgs.name_sub, fname.encode(), 0)
+	fname=_funcSub(parsedArgs.name_sub, fname.encode(), 0, wrap=False)
 	if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
 	if parsedArgs.print_posix_paths: fname=fname.replace(b"\\", b"/")
-	fname=_funcSub(parsedArgs.name_sub, fname, 1)
+	fname=_funcSub(parsedArgs.name_sub, fname, 1, wrap=False)
 	return fname
 
 def processDirName(dname):
@@ -706,7 +744,7 @@ def funcReplace(parsedArgs, match, **kwargs):
 		match=delayedSub(replacement.encode(errors="ignore"), match)
 	return match
 
-def _funcSub(subRules, match, regexIndex, **kwargs):
+def _funcSub(subRules, match, regexIndex, wrap=True, **kwargs):
 	"""
 		Handle --sub, --name-sub, and --dir-name-sub
 		TYSM mCoding for explaining how zip works
@@ -714,11 +752,14 @@ def _funcSub(subRules, match, regexIndex, **kwargs):
 	"""
 
 	if subRules:
-		replaceData=subRules[regexIndex%len(subRules)]
-		for group in replaceData:
-			if regexCheckerThing(match, group["tests"], group["antiTests"]):
-				for pattern, repl in zip(group["patterns"], group["repls"]):
-					match=re.sub(pattern, repl, match)
+		if wrap:
+			regexIndex=regexIndex%len(subRules)
+		if regexIndex<len(subRules):
+			replaceData=subRules[regexIndex]
+			for group in replaceData:
+				if regexCheckerThing(match, group["tests"], group["antiTests"]):
+					for pattern, repl in zip(group["patterns"], group["repls"]):
+						match=re.sub(pattern, repl, match)
 	return match
 
 def funcSub(parsedArgs, match, regexIndex, **kwargs):
@@ -783,7 +824,8 @@ def funcPrintName(parsedArgs, file, runData, **kwargs):
 		Print file name
 	"""
 	if parsedArgs.print_file_names and not runData["file"]["printedName"]:
-		sys.stdout.buffer.write(b"File: "+processFileName(file["name"])+b"\n")
+		sys.stdout.buffer.write(b"File: "*_header+processFileName(file["name"]))
+		sys.stdout.buffer.write(b"\n")
 		sys.stdout.buffer.flush()
 	runData["file"]["printedName"]=True
 
