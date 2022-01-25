@@ -9,8 +9,9 @@ For details, [check below](#details)
 
 <!--<HELP MSG>-->
 ```
-usage: jrep.py [-h] [--string] [--no-duplicates] [--file FILE [FILE ...]]
-               [--glob GLOB [GLOB ...]] [--stdin-files | --stdin-globs]
+usage: jrep.py [-h] [--string] [--no-duplicates] [--no-name-duplicates]
+               [--file FILE [FILE ...]] [--glob GLOB [GLOB ...]]
+               [--stdin-files | --stdin-globs]
                [--name-regex Regex [Regex ...]]
                [--name-anti-regex Regex [Regex ...]]
                [--name-ignore-regex Regex [Regex ...]]
@@ -59,6 +60,10 @@ options:
                                         apply to any other options.
   --no-duplicates, -D                   Don't print duplicate matches (See
                                         also: --order)
+  --no-name-duplicates                  Don't process files whose names have
+                                        already been processed (takes --name-
+                                        sub, --print-full-paths and --print-
+                                        posix-paths)
   --file FILE [FILE ...], -f FILE [FILE ...]
                                         A list of files to check
   --glob GLOB [GLOB ...], -g GLOB [GLOB ...]
@@ -212,7 +217,7 @@ options:
 
 ## `--order`
 
-- The default value for `--order` is <!--<HELP ORDER>-->`replace`, `match-whole-lines`, `sub`, `match-regex`, `no-duplicates`, `print-dir`, `print-name`, `print-matches`
+- The default value for `--order` is <!--<HELP ORDER>-->`replace`, `match-whole-lines`, `sub`, `match-regex`, `no-name-duplicates`, `no-duplicates`, `print-dir`, `print-name`, `print-matches`
 <!--</HELP ORDER>-->
 
 - Changing the order of `sub`, `replace`, and `match-whole-lines` will work but will make next to no sense

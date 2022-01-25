@@ -8,7 +8,7 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, sre_parse,
 	(Can be treated as public domain if your project requires that)
 """
 
-DEFAULTORDER=["replace", "match-whole-lines", "sub", "match-regex", "no-duplicates", "print-dir", "print-name", "print-matches"]
+DEFAULTORDER=["replace", "match-whole-lines", "sub", "match-regex", "no-name-duplicates", "no-duplicates", "print-dir", "print-name", "print-matches"]
 
 class JSObj:
 	"""
@@ -144,6 +144,7 @@ parser=argparse.ArgumentParser(formatter_class=CustomHelpFormatter)
 parser.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", help="Regex(es) to process matches for (reffered to as \"get regexes\")")
 parser.add_argument("--string"                    , "-s", action="store_true"                   , help="Treat get regexes as strings. Doesn't apply to any other options.")
 parser.add_argument("--no-duplicates"             , "-D", action="store_true"                   , help="Don't print duplicate matches (See also: --order)")
+parser.add_argument("--no-name-duplicates"        ,       action="store_true"                   , help="Don't process files whose names have already been processed (takes --name-sub, --print-full-paths and --print-posix-paths)")
 
 parser.add_argument("--file"                      , "-f", nargs="+", default=[]                 , help="A list of files to check")
 parser.add_argument("--glob"                      , "-g", nargs="+", default=[]                 , help="A list of globs to check")
@@ -714,7 +715,8 @@ runData={
 		"passedDirs":0,
 		"failedDirs":0,
 	},
-	"matchedStrings":[]  # --no-duplicates handler
+	"matchedStrings":[],  # --no-duplicates handler
+	"filenames":[],
 }
 
 runData["total"]["matchesPerRegex"]=[0 for x in parsedArgs.regex]
@@ -848,18 +850,28 @@ def funcNoDuplicates(parsedArgs, match, **kwargs):
 	if parsedArgs.no_duplicates:
 		runData["matchedStrings"].append(match[0])
 
+def funcNoNameDuplicates(parsedArgs, file, **kwargs):
+	"""
+		Handle --no-duplicates
+	"""
+	if processFileName(file["name"]) in runData["filenames"]:
+		raise NextFile()
+	if parsedArgs.no_name_duplicates:
+		runData["filenames"].append(processFileName(file["name"]))
+
 def funcPrintFailedFile(parsedArgs, file, runData):
 	funcPrintName(parsedArgs, file, runData)
 
 funcs={
-	"print-dir"        : funcPrintDir,
-	"replace"          : funcReplace,
-	"sub"              : funcSub,
-	"match-whole-lines": funcMatchWholeLines,
-	"match-regex"      : funcMatchRegex,
-	"print-name"       : funcPrintName,
-	"print-matches"    : funcPrintMatches,
-	"no-duplicates"    : funcNoDuplicates
+	"print-dir"         : funcPrintDir,
+	"replace"           : funcReplace,
+	"sub"               : funcSub,
+	"match-whole-lines" : funcMatchWholeLines,
+	"match-regex"       : funcMatchRegex,
+	"print-name"        : funcPrintName,
+	"print-matches"     : funcPrintMatches,
+	"no-duplicates"     : funcNoDuplicates,
+	"no-name-duplicates": funcNoNameDuplicates,
 }
 
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
@@ -946,6 +958,11 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					runData["dir"  ]["totalFiles"  ]+=1
 				elif func=="print-dir":
 					funcs["print-dir"](parsedArgs, runData, currDir)
+				elif func=="no-name-duplicates":
+					try:
+						funcs["no-name-duplicates"](parsedArgs, file)
+					except NextFile:
+						break
 
 		for regexIndex, regex in enumerate(parsedArgs.regex):
 			verbose(f"Handling regex {regexIndex}: {regex}")
