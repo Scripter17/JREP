@@ -143,8 +143,7 @@ class CustomHelpFormatter(argparse.HelpFormatter):
 parser=argparse.ArgumentParser(formatter_class=CustomHelpFormatter)
 parser.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", help="Regex(es) to process matches for (reffered to as \"get regexes\")")
 parser.add_argument("--string"                    , "-s", action="store_true"                   , help="Treat get regexes as strings. Doesn't apply to any other options.")
-parser.add_argument("--no-duplicates"             , "-D", action="store_true"                   , help="Don't print duplicate matches (See also: --order)")
-parser.add_argument("--no-name-duplicates"        ,       action="store_true"                   , help="Don't process files whose names have already been processed (takes --name-sub, --print-full-paths and --print-posix-paths)")
+parser.add_argument("--enhanced-engine"           , "-E", action="store_true"                   , help="Use alternate regex engine from https://pypi.org/project/regex/")
 
 parser.add_argument("--file"                      , "-f", nargs="+", default=[]                 , help="A list of files to check")
 parser.add_argument("--glob"                      , "-g", nargs="+", default=[]                 , help="A list of globs to check")
@@ -181,6 +180,9 @@ parser.add_argument("--file-ignore-regex"         ,       nargs="+", default=[],
 parser.add_argument("--match-regex"               ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Basically applies str.split(\"*\") to the list of --match-regex. If a match matches all regexes in the Nth --match-regex group (where N is the index of the current get regex) continue processing the match, otherwise move on to the next one")
 parser.add_argument("--match-anti-regex"          ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Like --match-regex but excludes matches that match any of the supplied regexes")
 parser.add_argument("--match-ignore-regex"        ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Like --match-anti-regex but doesn't contribute to --count *-failed-matches")
+
+parser.add_argument("--no-duplicates"             , "-D", action="store_true"                   , help="Don't print duplicate matches (See also: --order)")
+parser.add_argument("--no-name-duplicates"        ,       action="store_true"                   , help="Don't process files whose names have already been processed (takes --name-sub, --print-full-paths and --print-posix-paths)")
 
 parser.add_argument("--sort"                      , "-S",                                         help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available (see README)")
 parser.add_argument("--sort-regex"                ,       nargs="+", default=[], metavar="Regex", help="Regexes to apply to file names keys (like --replace) for purposes of sorting (EXPERIMENTAL)")
@@ -230,6 +232,9 @@ def warn(x):
 
 verbose("JREP preview version")
 verbose(parsedArgs)
+
+if parsedArgs.enhanced_engine:
+	import regex as re
 
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
 	warn("Error: Length of --replace must be either 1 or equal to the number of regexes")

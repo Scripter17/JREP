@@ -9,9 +9,8 @@ For details, [check below](#details)
 
 <!--<HELP MSG>-->
 ```
-usage: jrep.py [-h] [--string] [--no-duplicates] [--no-name-duplicates]
-               [--file FILE [FILE ...]] [--glob GLOB [GLOB ...]]
-               [--stdin-files | --stdin-globs]
+usage: jrep.py [-h] [--string] [--enhanced-engine] [--file FILE [FILE ...]]
+               [--glob GLOB [GLOB ...]] [--stdin-files | --stdin-globs]
                [--name-regex Regex [Regex ...]]
                [--name-anti-regex Regex [Regex ...]]
                [--name-ignore-regex Regex [Regex ...]]
@@ -35,7 +34,8 @@ usage: jrep.py [-h] [--string] [--no-duplicates] [--no-name-duplicates]
                [--file-ignore-regex Regex [Regex ...]]
                [--match-regex Regex [Regex ...]]
                [--match-anti-regex Regex [Regex ...]]
-               [--match-ignore-regex Regex [Regex ...]] [--sort SORT]
+               [--match-ignore-regex Regex [Regex ...]] [--no-duplicates]
+               [--no-name-duplicates] [--sort SORT]
                [--sort-regex Regex [Regex ...]] [--no-headers]
                [--print-directories] [--print-file-names] [--print-full-paths]
                [--print-posix-paths] [--dont-print-matches]
@@ -58,12 +58,8 @@ options:
   -h, --help                            show this help message and exit
   --string, -s                          Treat get regexes as strings. Doesn't
                                         apply to any other options.
-  --no-duplicates, -D                   Don't print duplicate matches (See
-                                        also: --order)
-  --no-name-duplicates                  Don't process files whose names have
-                                        already been processed (takes --name-
-                                        sub, --print-full-paths and --print-
-                                        posix-paths)
+  --enhanced-engine, -E                 Use alternate regex engine from
+                                        https://pypi.org/project/regex/
   --file FILE [FILE ...], -f FILE [FILE ...]
                                         A list of files to check
   --glob GLOB [GLOB ...], -g GLOB [GLOB ...]
@@ -146,6 +142,12 @@ options:
   --match-ignore-regex Regex [Regex ...]
                                         Like --match-anti-regex but doesn't
                                         contribute to --count *-failed-matches
+  --no-duplicates, -D                   Don't print duplicate matches (See
+                                        also: --order)
+  --no-name-duplicates                  Don't process files whose names have
+                                        already been processed (takes --name-
+                                        sub, --print-full-paths and --print-
+                                        posix-paths)
   --sort SORT, -S SORT                  Sort files by ctime, mtime, atime,
                                         name, or size. Prefix key with "r" to
                                         reverse. A windows-esque "blockwise"
