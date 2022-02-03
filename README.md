@@ -66,6 +66,8 @@ options:
                                         A list of globs to check
   --stdin-files, -F                     Treat STDIN as a list of files
   --stdin-globs, -G                     Treat STDIN as a list of globs
+                                        
+                                        
   --name-regex Regex [Regex ...], -t Regex [Regex ...]
                                         If a file name matches all supplied
                                         regexes, keep going. Otherwise
@@ -129,19 +131,17 @@ options:
   --file-ignore-regex Regex [Regex ...]
                                         Like --file-anti-regex but doesn't
                                         contribute to --count *-failed-files
-  --match-regex Regex [Regex ...]       Basically applies str.split("*") to
-                                        the list of --match-regex. If a match
-                                        matches all regexes in the Nth
-                                        --match-regex group (where N is the
-                                        index of the current get regex)
-                                        continue processing the match,
-                                        otherwise move on to the next one
+  --match-regex Regex [Regex ...]       A match from the Nth get regex must
+                                        match all regexes in the Nth group of
+                                        --match-regexes split along lone *'s.
   --match-anti-regex Regex [Regex ...]  Like --match-regex but excludes
                                         matches that match any of the supplied
                                         regexes
   --match-ignore-regex Regex [Regex ...]
                                         Like --match-anti-regex but doesn't
                                         contribute to --count *-failed-matches
+                                        
+                                        
   --no-duplicates, -D                   Don't print duplicate matches (See
                                         also: --order)
   --no-name-duplicates                  Don't process files whose names have

@@ -136,11 +136,22 @@ class FileRegexAction(argparse.Action):
 		values=[x.encode() for x in values]
 		setattr(namespace, self.dest, values)
 
+class CustomArgumentParser(argparse.ArgumentParser):
+	def add_line(self, text=""):
+		self._actions[-1].help+="\n"+text
+
 class CustomHelpFormatter(argparse.HelpFormatter):
 	def __init__(self, prog, indent_increment=2, max_help_position=24, width=None):
-		argparse.HelpFormatter.__init__(self, prog, indent_increment=2, max_help_position=shutil.get_terminal_size().columns//2, width=None)
+		argparse.HelpFormatter.__init__(self, prog, indent_increment, shutil.get_terminal_size().columns//2, width)
+	def _split_lines(self, text, width):
+		lines = super()._split_lines(text, width)
+		if "\n" in text:
+			lines += text.split("\n")[1:]
+			text = text.split("\n")[0]
+		return lines
 
-parser=argparse.ArgumentParser(formatter_class=CustomHelpFormatter)
+parser=CustomArgumentParser(formatter_class=CustomHelpFormatter)
+
 parser.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", help="Regex(es) to process matches for (reffered to as \"get regexes\")")
 parser.add_argument("--string"                    , "-s", action="store_true"                   , help="Treat get regexes as strings. Doesn't apply to any other options.")
 parser.add_argument("--enhanced-engine"           , "-E", action="store_true"                   , help="Use alternate regex engine from https://pypi.org/project/regex/")
@@ -151,6 +162,9 @@ parser.add_argument("--glob"                      , "-g", nargs="+", default=[] 
 _stdin=parser.add_mutually_exclusive_group()
 _stdin.add_argument("--stdin-files"               , "-F", action="store_true"                   , help="Treat STDIN as a list of files")
 _stdin.add_argument("--stdin-globs"               , "-G", action="store_true"                   , help="Treat STDIN as a list of globs")
+
+parser.add_line()
+parser.add_line()
 
 parser.add_argument("--name-regex"                , "-t", nargs="+", default=[], metavar="Regex", help="If a file name matches all supplied regexes, keep going. Otherwise continue")
 parser.add_argument("--name-anti-regex"           , "-T", nargs="+", default=[], metavar="Regex", help="Like --name-regex but excludes file names that match any of the supplied regexes")
@@ -177,9 +191,12 @@ parser.add_argument("--file-regex"                ,       nargs="+", default=[],
 parser.add_argument("--file-anti-regex"           ,       nargs="+", default=[], metavar="Regex", action=FileRegexAction, help="Like --file-regex but excludes files that match of the supplied regexes")
 parser.add_argument("--file-ignore-regex"         ,       nargs="+", default=[], metavar="Regex", action=FileRegexAction, help="Like --file-anti-regex but doesn't contribute to --count *-failed-files")
 
-parser.add_argument("--match-regex"               ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Basically applies str.split(\"*\") to the list of --match-regex. If a match matches all regexes in the Nth --match-regex group (where N is the index of the current get regex) continue processing the match, otherwise move on to the next one")
+parser.add_argument("--match-regex"               ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="A match from the Nth get regex must match all regexes in the Nth group of --match-regexes split along lone *'s.")
 parser.add_argument("--match-anti-regex"          ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Like --match-regex but excludes matches that match any of the supplied regexes")
 parser.add_argument("--match-ignore-regex"        ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Like --match-anti-regex but doesn't contribute to --count *-failed-matches")
+
+parser.add_line()
+parser.add_line()
 
 parser.add_argument("--no-duplicates"             , "-D", action="store_true"                   , help="Don't print duplicate matches (See also: --order)")
 parser.add_argument("--no-name-duplicates"        ,       action="store_true"                   , help="Don't process files whose names have already been processed (takes --name-sub, --print-full-paths and --print-posix-paths)")
@@ -232,7 +249,7 @@ def warn(x):
 
 verbose("JREP preview version")
 verbose(parsedArgs)
-
+ 
 if parsedArgs.enhanced_engine:
 	import regex as re
 
@@ -246,11 +263,11 @@ def regexCheckerThing(partial, partialPass, partialFail, full="", fullPass=[], f
 		False = Failed
 		None  = Ignored
 	"""
-	if any(map(lambda x:re.search(x, partial), partialIgnore)) or\
-	   any(map(lambda x:re.search(x, full   ), fullIgnore   )):
+	if (partialIgnore and any(map(lambda x:re.search(x, partial), partialIgnore))) or\
+	   (fullIgnore    and any(map(lambda x:re.search(x, full   ), fullIgnore   ))):
 		return None
-	if any(map(lambda x:re.search(x, partial), partialFail)) or\
-	   any(map(lambda x:re.search(x, full   ), fullFail   )):
+	if (partialFail and any(map(lambda x:re.search(x, partial), partialFail))) or\
+	   (fullFail    and any(map(lambda x:re.search(x, full   ), fullFail   ))):
 		return False
 	if all(map(lambda x:re.search(x, partial), partialPass)) and\
 	   all(map(lambda x:re.search(x, full   ), fullPass   )):
@@ -274,25 +291,25 @@ def globCheckerThing(partial, partialPass, partialFail, full="", fullPass=[], fu
 		return True
 	return False
 
-def filenameChecker(filename, fullFilename=None):
+def filenameChecker(file):
 	"""
 		Shorthand for handling filenames with regexCheckerThing
 	"""
 	r=regexCheckerThing(
-		filename,
+		file["name"],
 		parsedArgs.name_regex,
 		parsedArgs.name_anti_regex,
-		fullFilename or os.path.realpath(filename),
+		file["absDir"],
 		parsedArgs.full_name_regex,
 		parsedArgs.full_name_anti_regex,
 		parsedArgs.name_ignore_regex,
 		parsedArgs.full_name_ignore_regex,
 	)
 	g=globCheckerThing(
-		filename,
+		file["name"],
 		parsedArgs.name_glob,
 		parsedArgs.name_anti_glob,
-		fullFilename or os.path.realpath(filename),
+		file["absDir"],
 		parsedArgs.full_name_glob,
 		parsedArgs.full_name_anti_glob,
 		parsedArgs.name_ignore_glob,
@@ -320,7 +337,7 @@ def _iterdir(dirname, dir_fd, dironly):
 				dirname,
 				parsedArgs.dir_name_regex,
 				parsedArgs.dir_name_anti_regex,
-				os.path.realpath(dirname),
+				os.path.normpath(os.path.join(os.getcwd(), dirname)),
 				parsedArgs.dir_full_name_regex,
 				parsedArgs.dir_full_name_anti_regex,
 				parsedArgs.dir_name_ignore_regex,
@@ -619,19 +636,23 @@ def getFiles():
 		verbose(f"Pre-processing \"{file}\"")
 
 		if os.path.isfile(file):
-			if fileContentsDontMatter() or not filenameChecker(file):
+			relDir, basename=os.path.dirname(file), os.path.basename(file)
+			absDir=os.path.normpath(os.path.join(os.getcwd(), relDir))
+			ret={"name": file, "basename":basename, "relDir":relDir, "absDir":absDir, "data": b"", "isDir": False, "stdin": False}
+			if fileContentsDontMatter() or not filenameChecker(ret):
 				# Does the file content matter? No? Ignore it then
 				verbose("Optimizing away actually opening the file")
-				yield {"name": file, "data": b"", "isDir": False, "stdin": False}
+				yield ret
 			else:
 				try:
-					with open(file) as f:
+					with open(file, mode="r", buffering=65536) as f:
 						# Stream data from file instead of loading a 48.2TB file into RAM
 						try:
 							mmapFile=mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
 						except ValueError:
 							mmapFile=b""
-						yield {"name": file, "data": mmapFile, "isDir": False, "stdin": False}
+						ret["data"]=mmapFile
+						yield ret
 				except OSError as AAAAA:
 					warn(f"Cannot process \"{file}\" because of \"{AAAAA}\"")
 		else:
@@ -789,7 +810,7 @@ def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 		if lineEnd  ==-1: lineEnd  =None
 		return JSObj({
 			**match,
-			0: file["data"][lineStart:match.span()[0]]+match[0]+file["data"][match.span()[1]:lineEnd]
+			0: file["data"][lineStart+1:match.span()[0]]+match[0]+file["data"][match.span()[1]:lineEnd]
 		})
 	return match
 
@@ -822,7 +843,7 @@ def funcPrintDir(parsedArgs, runData, currDir, **kwargs):
 		Handle --print-directories
 	"""
 	if parsedArgs.print_directories and not runData["dir"]["printedName"]:
-		sys.stdout.buffer.write(b"Directory: "+processDirName(currDir)+b"\n")
+		sys.stdout.buffer.write(b"Directory: "*_header+processDirName(currDir)+b"\n")
 		sys.stdout.buffer.flush()
 		runData["dir"]["printedName"]=True
 
@@ -865,6 +886,9 @@ def funcNoNameDuplicates(parsedArgs, file, **kwargs):
 		runData["filenames"].append(processFileName(file["name"]))
 
 def funcPrintFailedFile(parsedArgs, file, runData):
+	"""
+		Print filename of failed file if --print-non-matching-files is specified
+	"""
 	funcPrintName(parsedArgs, file, runData)
 
 funcs={
@@ -922,7 +946,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	# Handle name fail regexes
 	# It has to be done here to make sure runData["dir"] doesn't miss stuff
 	# Handle --name-regex stuff
-	nameRegexResult=filenameChecker(file["name"])
+	nameRegexResult=filenameChecker(file)
 	if nameRegexResult is False:
 		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched a fail regex; Continuing...")
 		runData["dir"  ]["failedFiles"]+=1
