@@ -430,7 +430,7 @@ def handleCount(rules, runData):
 	catPlurals={"t":"totals", "d":"dirs", "f":"files", "m":"matches"}
 
 	def handleTotals(regexIndex, value):
-		print(f"{keyCat.title()} {keySubCatPlural} (R{regexIndex}): {value}")
+		print(f"{keyCat.title()} {keySubCatPlural} (R{regexIndex}):"*_header+f"{value}")
 
 	def handleFiltereds(regexIndex):
 		if   key[2]=="p": keySubCatFilter="passed"
@@ -444,9 +444,9 @@ def handleCount(rules, runData):
 			divisor=runData[keyCat]['total'+keySubCat+"PerRegex"][regexIndex]
 
 		if len(key)==3 or key[3] in "ctr":
-			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}): {filterCount}")
+			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}):"*_header+f"{filterCount}")
 		elif key[3] in "p":
-			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}): {filterCount/divisor}")
+			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}):"*_header+f"{filterCount/divisor}")
 
 	for rule in rules:
 		for key in parsedArgs.count:
@@ -652,14 +652,6 @@ def printMatch(match, regexIndex):
 	sys.stdout.buffer.write(b"\n")
 	sys.stdout.buffer.flush()
 
-# Abbreviations to make the code slightly cleaner
-#_FML=parsedArgs.limit["fmp"]
-#_DML=parsedArgs.limit["dmp"]
-#_TML=parsedArgs.limit["tmp"]
-#_DFL=parsedArgs.limit["dfp"]
-#_TFL=parsedArgs.limit["tfp"]
-#_TDL=parsedArgs.limit["tdp"]
-
 # Tracking stuffs
 currDir=None
 lastDir=None
@@ -712,17 +704,20 @@ runData={
 	"filenames":[],
 }
 
-def checkLimits(sn, limit=None, value=None):
+def checkLimits(sn):
+	"""
+		Given an LCName's "short name" (total-files -> tf),\
+		check whether or not it's exceeded its value in --limit (if set)
+	"""
 	def getValue(sn):
 		nameMap={"t":"total","d":"dir","f":"file","m":"match"}
 		typeMap={"t":"total","p":"passed","f":"failed"}
 		plural="e"*(sn[1]=="m")+"s"
 		return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
-	if limit is None: limit=parsedArgs.limit[sn]
-	if limit==0:
-		if sn[1] in "df" and sn[2]=="p":
-			limit=parsedArgs.limit[sn[:2]]
-	if value is None: value=getValue(sn)
+	limit=parsedArgs.limit[sn]
+	if limit==0 and sn[2]=="p":
+		limit=parsedArgs.limit[sn[:2]]
+	value=getValue(sn)
 	return bool(limit and value>=limit)
 
 runData["total"]["totalMatchesPerRegex" ]=[0 for x in parsedArgs.regex]
@@ -1052,7 +1047,6 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 						break
 
 			except Exception as AAAAA:
-				raise AAAAA
 				warn(f"Cannot process \"{file['name']}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
 
 	if parsedArgs.print_non_matching_files and not runData["file"]["passed"]:
