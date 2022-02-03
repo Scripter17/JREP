@@ -33,11 +33,11 @@ class JSObj:
 def _LCNameRegexPart(*opts):
 	# Helper function for generating the --limiy/--count parser regex
 	return "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
-_LCNameRegex=_LCNameRegexPart(r"files?"              , r"dir(?:ectori(?:es|y))?", r"total"                 )    +r"[-_]?"+\
-             _LCNameRegexPart(r"match(?:e?s)?"       , r"files?"                , r"dir(?:ectori(?:es|y))?")    +r"[-_]?"+\
-             _LCNameRegexPart(r"total"               , r"fail(?:u(?:re)?s?|d)"  , r"pass(?:e?[sd])?"       )+"?"+r"[-_]?"+\
-             _LCNameRegexPart(r"counts?"             , r"percent(?:age)?s?"                                )+"?"+r"[-_]?"+\
-             _LCNameRegexPart(r"regex"               , r"total"                                            )+"?"
+_LCNameRegex=_LCNameRegexPart(r"files?"       , r"dir(?:ectori(?:es|y))?", r"total"                             )    +r"[-_]?"+\
+             _LCNameRegexPart(r"match(?:e?s)?", r"files?"                , r"dir(?:ectori(?:es|y))?"            )    +r"[-_]?"+\
+             _LCNameRegexPart(r"total"        , r"fail(?:u(?:re)?s?|d)"  , r"pass(?:e?[sd])?"       , "handled?")+"?"+r"[-_]?"+\
+             _LCNameRegexPart(r"counts?"      , r"percent(?:age)?s?"                                            )+"?"+r"[-_]?"+\
+             _LCNameRegexPart(r"regex"        , r"total"                                                        )+"?"
 _LCNameRegex=f"^{_LCNameRegex}$"
 
 def parseLCName(name):
@@ -434,6 +434,7 @@ def handleCount(rules, runData):
 
 	def handleFiltereds(regexIndex):
 		if   key[2]=="p": keySubCatFilter="passed"
+		if   key[2]=="h": keySubCatFilter="handled"
 		elif key[2]=="f": keySubCatFilter="failed"
 
 		if regexIndex=="*":
@@ -463,9 +464,9 @@ def handleCount(rules, runData):
 			elif re.match(r"^..r$", key):
 				for regexIndex, value in enumerate(runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"]):
 					handleTotals(regexIndex, value)
-			elif re.match(r"^..[pf][cp]?t?$", key):
+			elif re.match(r"^..[phf][cp]?t?$", key):
 				handleFiltereds("*")
-			elif re.match(r"^..[pf][cp]?r$", key):
+			elif re.match(r"^..[phf][cp]?r$", key):
 				for regexIndex, value in enumerate(runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"]):
 					handleFiltereds(regexIndex)
 
@@ -670,9 +671,10 @@ runData={
 	"dir":{
 		"printedName":False,
 
-		"totalFiles" :0,
-		"passedFiles":0,
-		"failedFiles":0,
+		"totalFiles"  :0,
+		"passedFiles" :0,
+		"handledFiles":0,
+		"failedFiles" :0,
 		"filesPerRegex":[],
 
 		"totalMatches" :0,
@@ -688,9 +690,10 @@ runData={
 		"failedDirs":0,
 		"dirsPerRegex":[],
 
-		"totalFiles" :0,
-		"passedFiles":0,
-		"failedFiles":0,
+		"totalFiles"  :0,
+		"passedFiles" :0,
+		"handledFiles":0,
+		"failedFiles" :0,
 		"filesPerRegex":[],
 
 		"totalMatches" :0,
@@ -711,9 +714,12 @@ def checkLimits(sn):
 	"""
 	def getValue(sn):
 		nameMap={"t":"total","d":"dir","f":"file","m":"match"}
-		typeMap={"t":"total","p":"passed","f":"failed"}
+		typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
 		plural="e"*(sn[1]=="m")+"s"
-		return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
+		try:
+			return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
+		except KeyError:
+			return 0
 	limit=parsedArgs.limit[sn]
 	if limit==0 and sn[2]=="p":
 		limit=parsedArgs.limit[sn[:2]]
@@ -925,6 +931,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		runData["dir"  ]["passedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
 		runData["dir"  ]["failedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
 
+	runData["total"]["totalFiles"  ]+=1
+	runData["dir"  ]["totalFiles"  ]+=1
 	# Handle name fail regexes
 	# It has to be done here to make sure runData["dir"] doesn't miss stuff
 	# Handle --name-regex stuff
@@ -958,15 +966,16 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	matchedAny=False
 
 	if runData["file"]["passed"]:
+		runData["dir"  ]["passedFiles" ]+=1
+		runData["total"]["passedFiles" ]+=1
+
 		# Handle printing file and dir names when there's no regexes
 		if not parsedArgs.regex:
+			runData["dir"  ]["handledFiles"]+=1
+			runData["total"]["handledFiles"]+=1
 			for func in parsedArgs.order:
 				if func=="print-name":
 					funcs["print-name"](parsedArgs, file, runData)
-					runData["dir"  ]["passedFiles" ]+=1
-					runData["total"]["passedFiles" ]+=1
-					runData["total"]["totalFiles"  ]+=1
-					runData["dir"  ]["totalFiles"  ]+=1
 				elif func=="print-dir":
 					funcs["print-dir"](parsedArgs, runData, currDir)
 				elif func=="no-name-duplicates":
@@ -1000,10 +1009,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 						if lastDir!=currDir:
 							runData["total"]["dirsPerRegex"][regexIndex]+=1
 						if regexIndex==0:
-							runData["dir"  ]["passedFiles"]+=1
-							runData["total"]["passedFiles"]+=1
-							runData["total"]["totalFiles" ]+=1
-							runData["dir"  ]["totalFiles" ]+=1
+							runData["dir"  ]["handledFiles"]+=1
+							runData["total"]["handledFiles"]+=1
 					runData["total"]["totalMatchesPerRegex"][regexIndex]+=1
 					runData["dir"  ]["totalMatchesPerRegex"][regexIndex]+=1
 					runData["file" ]["totalMatchesPerRegex"][regexIndex]+=1
@@ -1065,7 +1072,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	if checkLimits("tmt") or checkLimits("tmp") or checkLimits("tmf"):
 		verbose("Total match limit reached; Exiting")
 		break
-	if checkLimits("tft") or checkLimits("tfp") or checkLimits("tff"):
+	if checkLimits("tft") or checkLimits("tfp") or checkLimits("tfh") or checkLimits("tff"):
 		verbose("Total file limit reached; Exiting")
 		break
 
