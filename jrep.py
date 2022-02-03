@@ -244,8 +244,10 @@ def verbose(x):
 		print(f"Verbose on line {caller[2]} in function {caller[3]}: {x}")
 def warn(x):
 	if not parsedArgs.no_warn:
-		caller=inspect.stack()[1]
-		print(f"Waring on line {caller[2]} in function {caller[3]}: {x}", file=sys.stderr)
+		#caller=inspect.stack()[1]
+		#print(f"Waring on line {caller[2]} in function {caller[3]}: {x}", file=sys.stderr)
+		calls=inspect.stack()[1:]
+		print(f"Waring on lines {', '.join([str(call[2]) for call in calls])} in functions {', '.join([str(call[3]) for call in calls])} : {x}", file=sys.stderr)
 
 verbose("JREP preview version")
 verbose(parsedArgs)
@@ -380,18 +382,9 @@ def _iterdir(dirname, dir_fd, dironly):
 				# Yirld files and folders in the right order
 				if parsedArgs.depth_first:
 					yield from directories
-					for file in files:
-						yield file
-						if doneDir:
-							# Optimization for --limit total-dirs
-							doneDir=False
-							break
+					yield from files
 				else:
-					for file in files:
-						yield file
-						if doneDir:
-							doneDir=False
-							break
+					yield from files
 					yield from directories
 		finally:
 			if fd is not None:
@@ -401,6 +394,7 @@ def _iterdir(dirname, dir_fd, dironly):
 glob._iterdir=_iterdir
 
 def _glob1(dirname, pattern, dir_fd, dironly):
+	global doneDir
 	names = _iterdir(dirname, dir_fd, dironly)
 	if not glob._ishidden(pattern):
 		names = (x for x in names if not glob._ishidden(x))
@@ -408,6 +402,9 @@ def _glob1(dirname, pattern, dir_fd, dironly):
 		if fnmatch.fnmatch(name, pattern):
 			verbose(f"Yielding \"{name}\"")
 			yield name
+		if doneDir:
+			doneDir=False
+			break
 glob._glob1=_glob1
 
 # Dumb output fstring generation stuff
@@ -696,12 +693,12 @@ def printMatch(match, regexIndex):
 	sys.stdout.buffer.flush()
 
 # Abbreviations to make the code slightly cleaner
-_FML=parsedArgs.limit["fmp"]
-_DML=parsedArgs.limit["dmp"]
-_TML=parsedArgs.limit["tmp"]
-_DFL=parsedArgs.limit["dfp"]
-_TFL=parsedArgs.limit["tfp"]
-_TDL=parsedArgs.limit["tdp"]
+#_FML=parsedArgs.limit["fmp"]
+#_DML=parsedArgs.limit["dmp"]
+#_TML=parsedArgs.limit["tmp"]
+#_DFL=parsedArgs.limit["dfp"]
+#_TFL=parsedArgs.limit["tfp"]
+#_TDL=parsedArgs.limit["tdp"]
 
 # Tracking stuffs
 currDir=None
@@ -710,46 +707,69 @@ lastDir=None
 runData={
 	"file": {
 		"printedName":False,
-		"totalMatches":0,
-		"matchesPerRegex":[],
-		"matches":[],
-		"passedMatches":[],
-		"failedMatches":[],
+
+		"totalMatches" :0,
+		"passedMatches":0,
+		"failedMatches":0,
+		"totalMatchesPerRegex" :[],
+		"passedMatchesPerRegex":[],
+		"failedMatchesPerRegex":[],
 	},
 	"dir":{
 		"printedName":False,
-		"totalFiles":0,
-		"totalMatches":0,
-		"filesPerRegex":[],
-		"matchesPerRegex":[],
-		"passedMatches":[],
-		"failedMatches":[],
+
+		"totalFiles" :0,
 		"passedFiles":0,
 		"failedFiles":0,
+		"filesPerRegex":[],
+
+		"totalMatches" :0,
+		"passedMatches":0,
+		"failedMatches":0,
+		"totalMatchesPerRegex" :[],
+		"passedMatchesPerRegex":[],
+		"failedMatchesPerRegex":[],
 	},
 	"total":{
-		"totalDirs":0,
-		"totalFiles":0,
-		"totalMatches":0,
-		"dirsPerRegex":[],
-		"filesPerRegex":[],
-		"matchesPerRegex":[],
-		"passedMatches":[],
-		"failedMatches":[],
-		"passedFiles":0,
-		"failedFiles":0,
+		"totalDirs" :0,
 		"passedDirs":0,
 		"failedDirs":0,
+		"dirsPerRegex":[],
+
+		"totalFiles" :0,
+		"passedFiles":0,
+		"failedFiles":0,
+		"filesPerRegex":[],
+
+		"totalMatches" :0,
+		"passedMatches":0,
+		"failedMatches":0,
+		"totalMatchesPerRegex" :[],
+		"passedMatchesPerRegex":[],
+		"failedMatchesPerRegex":[],
 	},
 	"matchedStrings":[],  # --no-duplicates handler
 	"filenames":[],
 }
 
-runData["total"]["matchesPerRegex"]=[0 for x in parsedArgs.regex]
+def checkLimits(sn, limit=None, value=None):
+	def getValue(sn):
+		nameMap={"t":"total","d":"dir","f":"file","m":"match"}
+		typeMap={"t":"total","p":"passed","f":"failed"}
+		plural="e"*(sn[1]=="m")+"s"
+		return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
+	if limit is None: limit=parsedArgs.limit[sn]
+	if limit==0:
+		if sn[1] in "df" and sn[2]=="p":
+			limit=parsedArgs.limit[sn[:2]]
+	if value is None: value=getValue(sn)
+	return bool(limit and value>=limit)
+
+runData["total"]["totalMatchesPerRegex" ]=[0 for x in parsedArgs.regex]
+runData["total"]["passedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
+runData["total"]["failedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
 runData["total"]["filesPerRegex"  ]=[0 for x in parsedArgs.regex]
 runData["total"]["dirsPerRegex"   ]=[0 for x in parsedArgs.regex]
-runData["total"]["passedMatches"  ]=[0 for x in parsedArgs.regex]
-runData["total"]["failedMatches"  ]=[0 for x in parsedArgs.regex]
 
 def delayedSub(repl, match):
 	"""
@@ -831,9 +851,12 @@ def funcMatchRegex(parsedArgs, match, regexIndex, **kwargs):
 		partialIgnore=parsedArgs.match_ignore_regex[regexIndex] if parsedArgs.match_ignore_regex else [],
 	)
 	if matchRegexResult is False:
-		runData["total"]["failedMatches"][regexIndex]+=1
-		runData["dir"  ]["failedMatches"][regexIndex]+=1
-		runData["file" ]["failedMatches"][regexIndex]+=1
+		runData["total"]["failedMatches"        ]            +=1
+		runData["dir"  ]["failedMatches"        ]            +=1
+		runData["file" ]["failedMatches"        ]            +=1
+		runData["total"]["failedMatchesPerRegex"][regexIndex]+=1
+		runData["dir"  ]["failedMatchesPerRegex"][regexIndex]+=1
+		runData["file" ]["failedMatchesPerRegex"][regexIndex]+=1
 		raise NextFile()
 	elif matchRegexResult is None:
 		raise NextFile()
@@ -909,12 +932,14 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		verbose(f"\"{file['name']}\" is a directory; Continuing")
 		continue
 
-	runData["file"]["passed"         ]=True
-	runData["file"]["printedName"    ]=False
-	runData["file"]["matchesPerRegex"]=[0 for x in parsedArgs.regex]
-	runData["file"]["totalMatches"   ]=0
-	runData["file"]["passedMatches"  ]=[0 for x in parsedArgs.regex]
-	runData["file"]["failedMatches"  ]=[0 for x in parsedArgs.regex]
+	runData["file"]["passed"       ]=True
+	runData["file"]["printedName"  ]=False
+	runData["file"]["totalMatches" ]=0
+	runData["file"]["passedMatches"]=0
+	runData["file"]["failedMatches"]=0
+	runData["file"]["totalMatchesPerRegex" ]=[0 for x in parsedArgs.regex]
+	runData["file"]["passedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
+	runData["file"]["failedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
 
 	# --file-limit, --dir-match-limit, --dir-file-count, and --dir-match-count
 	lastDir=currDir
@@ -928,20 +953,22 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				verbose("Just exited a directory; Printing runData...")
 				handleCount(rules=["dir"], runData=runData)
 			# Handle --limit total-dir
-			if _TDL and runData["total"]["totalDirs"]>=_TDL:
+			if checkLimits("tdt"):
 				verbose("Total directory limit reached; Exiting...")
 				break
 		# Initialize relevant runData
 		runData["dir"  ]["printedName"    ] =False
 		runData["total"]["totalDirs"      ]+=1
 		runData["dir"  ]["totalFiles"     ] =0
-		runData["dir"  ]["matchesPerRegex"] =[0 for x in parsedArgs.regex]
 		runData["dir"  ]["filesPerRegex"  ] =[0 for x in parsedArgs.regex]
-		runData["dir"  ]["totalMatches"   ] =0
 		runData["dir"  ]["failedFiles"    ] =0
 		runData["dir"  ]["passedFiles"    ] =0
-		runData["dir"  ]["passedMatches"  ] =[0 for x in parsedArgs.regex]
-		runData["dir"  ]["failedMatches"  ] =[0 for x in parsedArgs.regex]
+		runData["dir"  ]["totalMatches" ]=0
+		runData["dir"  ]["passedMatches"]=0
+		runData["dir"  ]["failedMatches"]=0
+		runData["dir"  ]["totalMatchesPerRegex" ]=[0 for x in parsedArgs.regex]
+		runData["dir"  ]["passedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
+		runData["dir"  ]["failedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
 
 	# Handle name fail regexes
 	# It has to be done here to make sure runData["dir"] doesn't miss stuff
@@ -1022,12 +1049,12 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 							runData["total"]["passedFiles"]+=1
 							runData["total"]["totalFiles" ]+=1
 							runData["dir"  ]["totalFiles" ]+=1
-					runData["total"]["matchesPerRegex"][regexIndex]+=1
-					runData["dir"  ]["matchesPerRegex"][regexIndex]+=1
-					runData["file" ]["matchesPerRegex"][regexIndex]+=1
-					runData["total"]["totalMatches"   ]            +=1
-					runData["dir"  ]["totalMatches"   ]            +=1
-					runData["file" ]["totalMatches"   ]            +=1
+					runData["total"]["totalMatchesPerRegex"][regexIndex]+=1
+					runData["dir"  ]["totalMatchesPerRegex"][regexIndex]+=1
+					runData["file" ]["totalMatchesPerRegex"][regexIndex]+=1
+					runData["total"]["totalMatches"        ]            +=1
+					runData["dir"  ]["totalMatches"        ]            +=1
+					runData["file" ]["totalMatches"        ]            +=1
 
 					match=JSObj({
 						0:match[0],
@@ -1051,17 +1078,22 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 						except NextFile:
 							break
 					else:
-						runData["total"]["passedMatches"][regexIndex]+=1
-						runData["dir"  ]["passedMatches"][regexIndex]+=1
+						runData["total"]["passedMatches"        ]            +=1
+						runData["dir"  ]["passedMatches"        ]            +=1
+						runData["file" ]["passedMatches"        ]            +=1
+						runData["total"]["passedMatchesPerRegex"][regexIndex]+=1
+						runData["dir"  ]["passedMatchesPerRegex"][regexIndex]+=1
+						runData["file" ]["passedMatchesPerRegex"][regexIndex]+=1
 
 					# Handle --match-limit, --dir-match-limit, and --total-match-limit
-					if (_FML and matchIndex                      >=_FML) or\
-					   (_DML and runData["dir"  ]["totalMatches"]>=_DML) or\
-					   (_TML and runData["total"]["totalMatches"]>=_TML):
+					if checkLimits("tmt") or checkLimits("tmp") or checkLimits("tmf") or\
+					   checkLimits("dmt") or checkLimits("dmp") or checkLimits("dmf") or\
+					   checkLimits("fmt") or checkLimits("fmp") or checkLimits("fmf"):
 						break
 
 			except Exception as AAAAA:
-				warn(f"Cannot process \"{file}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
+				raise AAAAA
+				warn(f"Cannot process \"{file['name']}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}")
 
 	if parsedArgs.print_non_matching_files and not runData["file"]["passed"]:
 		verbose(f"\"{file['name']}\" didn't match any file regexes, but --print-non-matching-files was specified")
@@ -1076,17 +1108,18 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	handleCount(rules=["file"], runData=runData)
 
 	# Hanlde --limit total-matches and total-files
-	if _TML!=0 and runData["total"]["totalMatches"]>=_TML:
+	if checkLimits("tmt") or checkLimits("tmp") or checkLimits("tmf"):
 		verbose("Total match limit reached; Exiting")
 		break
-	if _TFL!=0 and runData["total"]["totalFiles"]>=_TFL:
+	if checkLimits("tft") or checkLimits("tfp") or checkLimits("tff"):
 		verbose("Total file limit reached; Exiting")
 		break
 
 	# Handle --limit dir-files and dir-matches
 	# Really slow on big directories
 	# Might eventually have this hook into _iterdir using a global flag or something
-	if (_DFL!=0 and runData["dir"]["totalFiles"]>=_DFL) or (_DML!=0 and runData["dir"]["totalMatches"]>=_DML):
+	if checkLimits("dft") or checkLimits("dfp") or checkLimits("dff") or\
+	   checkLimits("dmt") or checkLimits("dmp") or checkLimits("dmf"):
 		verbose("Dir limit(s) reached")
 		doneDir=True
 
