@@ -36,7 +36,7 @@ def _LCNameRegexPart(*opts):
 _LCNameRegex=_LCNameRegexPart(r"files?"              , r"dir(?:ectori(?:es|y))?", r"total"                 )    +r"[-_]?"+\
              _LCNameRegexPart(r"match(?:e?s)?"       , r"files?"                , r"dir(?:ectori(?:es|y))?")    +r"[-_]?"+\
              _LCNameRegexPart(r"total"               , r"fail(?:u(?:re)?s?|d)"  , r"pass(?:e?[sd])?"       )+"?"+r"[-_]?"+\
-             _LCNameRegexPart(r"counts?"             , r"percent(age)?s?"                                  )+"?"+r"[-_]?"+\
+             _LCNameRegexPart(r"counts?"             , r"percent(?:age)?s?"                                )+"?"+r"[-_]?"+\
              _LCNameRegexPart(r"regex"               , r"total"                                            )+"?"
 _LCNameRegex=f"^{_LCNameRegex}$"
 
@@ -48,8 +48,6 @@ def parseLCName(name):
 	match=re.match(_LCNameRegex, name, re.I)
 	if match:
 		ret="".join(filter(lambda x:x, match.groups())).lower()
-		if len(ret)==2:
-			ret+="p"
 	return ret
 
 class LimitAction(argparse.Action):
@@ -424,90 +422,52 @@ ofmt={
 
 def handleCount(rules, runData):
 	"""
-		A jank function that handles --count stuff
+		A hopefully less jank function that handles --count stuff
 	"""
-	categories   ={"t":"total", "d":"dir",  "f":"file"                }
-	subCategories={             "d":"dirs", "f":"files", "m":"matches"}
-	modes        ={"f":"failed", "p":"passed"}
-	values       ={"c":"count", "p":"percent", "":"count"}
-	subModes     ={"t":"Total", "r":"PerRegex"}
+	cats      ={"t":"total" , "d":"dir" , "f":"file"                }
+	subCats   ={"t":"dfm"   , "d":"fm"  , "f":"m"                   }
+	catNames  ={"t":"total" , "d":"dir" , "f":"file" , "m":"match"  }
+	catPlurals={"t":"totals", "d":"dirs", "f":"files", "m":"matches"}
 
-	def sum2(*args, zero=0):
-		ret=zero
-		for x in args:
-			if isinstance(args, list):
-				ret+=sum(x)
-			else:
-				ret+=x
-		return ret
+	def handleTotals(regexIndex, value):
+		print(f"{keyCat.title()} {keySubCatPlural} (R{regexIndex}): {value}")
 
-	def handleTot(key):
-		category   =categories[key[0]]
-		subcategory=subCategories[key[1]]
-		count      =runData[category][f"total{subcategory.title()}"]
-		print(f"{category} {subcategory} count:"*_header+f"{count}")
+	def handleFiltereds(regexIndex):
+		if   key[2]=="p": keySubCatFilter="passed"
+		elif key[2]=="f": keySubCatFilter="failed"
 
-	def handleReg(key):
-		category   =categories[key[0]]
-		subcategory=subCategories[key[1]]
-		for regexIndex, count in enumerate(runData[category][subcategory+"PerRegex"]):
-			print(f"{category.title()} {subcategory.lower()} count (R{regexIndex}): "*_header+f"{count}")
+		if regexIndex=="*":
+			filterCount=runData[keyCat][keySubCatFilter+keySubCat]
+			divisor=runData[keyCat]['total'+keySubCat]
+		else:
+			filterCount=runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"][regexIndex]
+			divisor=runData[keyCat]['total'+keySubCat+"PerRegex"][regexIndex]
 
-	def handleFilteredTot(key):
-		category   =categories[key[0]]
-		subcategory=subCategories[key[1]]
-		mode       =modes[key[2]]
-		kind       =values[key[3]]
-		val=sum2(runData[category][mode+subcategory.title()])
-		if kind=="percent":
-			val/=sum2(runData[category]["passed"+subcategory.title()])+sum2(runData[category]["failed"+subcategory.title()])
-			val=f"{val:0.05f}"
-		print(f"{category.title()} {subcategory} {mode} {kind}: "*_header+f"{val}")
+		if len(key)==3 or key[3] in "ctr":
+			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}): {filterCount}")
+		elif key[3] in "p":
+			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}): {filterCount/divisor}")
 
-	def handleFilteredReg(key):
-		category   =categories[key[0]]
-		subcategory=subCategories[key[1]]
-		mode       =modes[key[2]]
-		kind       =values[key[3]]
-		vals=runData[category][mode+subcategory.title()]
-		for index, val in enumerate(vals):
-			if kind=="percent":
-				val/=runData[category]["passed"+subcategory.title()][index]+runData[category]["failed"+subcategory.title()][index]
-				val=f"{val:0.05f}"
-			print(f"{category.title()} {subcategory} {mode} {kind} (R{regexIndex}): "*_header+f"{val}")
-
-	if "file" in rules:
-		if parsedArgs.print_run_data:
-			fileRunData=runData["file"].copy()
-			fileRunData.pop("matches")
-			print(json.dumps(fileRunData))
+	for rule in rules:
 		for key in parsedArgs.count:
-			if key=="fmt?":
-				handleTot(key)
-			if key=="fmr":
-				handleReg(key)
+			if key[0] not in cats or cats[key[0]]!=rule: continue
+			if key[1] not in subCats[key[0]]: continue
 
-	if "dir" in rules:
-		for key in parsedArgs.count:
-			if parsedArgs.print_run_data:
-				print(json.dumps(runData["dir"]))
-			if re.search(r"^d[fm]t?$", key):
-				handleTot(key)
-			if re.search(r"^d[fm]r$", key):
-				handleTot(key)
-			if re.search(r"^d[dfm][pf][cp]t?$", key):
-				handleFilteredTot(key)
-			if re.search(r"^d[dfm][pf][cp]r$", key):
-				handleFilteredReg(key)
+			keyCat         =cats[key[0]]
+			keySubCatPlural=catPlurals[key[1]]
+			keySubCat      =keySubCatPlural.title()
+			keySubCatFilter="total"
 
-	if "total" in rules:
-		if parsedArgs.print_run_data:
-			print(json.dumps(runData["total"]))
-		for key in parsedArgs.count:
-			if re.search(r"^t[dfm][pf][cp]t?$", key):
-				handleFilteredTot(key)
-			if re.search(r"^t[dfm][pf][cp]r$", key):
-				handleFilteredReg(key)
+			if re.match(r"^..t?$", key):
+				handleTotals("*", runData[keyCat][keySubCatFilter+keySubCat])
+			elif re.match(r"^..r$", key):
+				for regexIndex, value in enumerate(runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"]):
+					handleTotals(regexIndex, value)
+			elif re.match(r"^..[pf][cp]?t?$", key):
+				handleFiltereds("*")
+			elif re.match(r"^..[pf][cp]?r$", key):
+				for regexIndex, value in enumerate(runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"]):
+					handleFiltereds(regexIndex)
 
 @functools.cache
 def _blockwiseSort(x, y):
