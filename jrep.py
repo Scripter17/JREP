@@ -430,7 +430,7 @@ def handleCount(rules, runData):
 	catPlurals={"t":"totals", "d":"dirs", "f":"files", "m":"matches"}
 
 	def handleTotals(regexIndex, value):
-		print(f"{keyCat.title()} {keySubCatPlural} (R{regexIndex}):"*_header+f"{value}")
+		print(f"{keyCat.title()} {keySubCatPlural} (R{regexIndex}): "*_header+f"{value}")
 
 	def handleFiltereds(regexIndex):
 		if   key[2]=="p": keySubCatFilter="passed"
@@ -444,9 +444,9 @@ def handleCount(rules, runData):
 			divisor=runData[keyCat]['total'+keySubCat+"PerRegex"][regexIndex]
 
 		if len(key)==3 or key[3] in "ctr":
-			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}):"*_header+f"{filterCount}")
+			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}): "*_header+f"{filterCount}")
 		elif key[3] in "p":
-			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}):"*_header+f"{filterCount/divisor}")
+			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}): "*_header+f"{filterCount/divisor}")
 
 	for rule in rules:
 		for key in parsedArgs.count:
