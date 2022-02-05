@@ -44,10 +44,10 @@ usage: jrep.py [-h] [--string] [--enhanced-engine] [--file FILE [FILE ...]]
                [--name-sub Regex [Regex ...]]
                [--dir-name-sub Regex [Regex ...]] [--escape]
                [--count COUNT [COUNT ...]] [--limit LIMIT [LIMIT ...]]
-               [--print-run-data] [--depth-first]
-               [--glob-root-dir GLOB_ROOT_DIR] [--match-whole-lines]
-               [--print-non-matching-files] [--no-warn] [--weave-matches]
-               [--strict-weave] [--order ORDER [ORDER ...]] [--verbose]
+               [--depth-first] [--glob-root-dir GLOB_ROOT_DIR]
+               [--match-whole-lines] [--print-non-matching-files] [--no-warn]
+               [--hard-warn] [--weave-matches] [--strict-weave]
+               [--order ORDER [ORDER ...]] [--verbose] [--print-rundata]
                [Regex ...]
 
 positional arguments:
@@ -192,7 +192,6 @@ options:
                                         Limit match/file/dir per file, dir,
                                         and/or total (Ex: --limit filematch=1
                                         total_dirs=5)
-  --print-run-data                      Print raw runData JSON
   --depth-first                         Enter subdirectories before processing
                                         files
   --glob-root-dir GLOB_ROOT_DIR         Root dir to run globs in (JANK)
@@ -200,6 +199,7 @@ options:
   --print-non-matching-files            Print file names with no matches
                                         (Partially broken)
   --no-warn                             Don't print warning messages
+  --hard-warn                           Throw errors instead of warnings
   --weave-matches, -w                   Weave regex matchdes (print first
                                         results for each get regex, then
                                         second results, etc.)
@@ -207,6 +207,8 @@ options:
   --order ORDER [ORDER ...]             The order in which modifications to
                                         matches are applied (see README)
   --verbose, -v                         Verbose info
+  --print-rundata, --print-run-data     Print raw runData JSON at the end
+                                        (used for debugging)
 
 ```
 <!--</HELP MSG>-->
