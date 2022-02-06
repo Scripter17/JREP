@@ -9,8 +9,9 @@ For details, [check below](#details)
 
 <!--<HELP MSG>-->
 ```
-usage: jrep.py [-h] [--string] [--enhanced-engine] [--file FILE [FILE ...]]
-               [--glob GLOB [GLOB ...]] [--stdin-files | --stdin-globs]
+usage: jrep.py [--help [HELP]] [--string] [--enhanced-engine]
+               [--file FILE [FILE ...]] [--glob GLOB [GLOB ...]]
+               [--stdin-files | --stdin-globs]
                [--name-regex Regex [Regex ...]]
                [--name-anti-regex Regex [Regex ...]]
                [--name-ignore-regex Regex [Regex ...]]
@@ -55,7 +56,9 @@ positional arguments:
                                         (reffered to as "get regexes")
 
 options:
-  -h, --help                            show this help message and exit
+  --help [HELP], -h [HELP]              show this help message and exit OR use
+                                        `--help [topic]` for help with an
+                                        option
   --string, -s                          Treat get regexes as strings. Doesn't
                                         apply to any other options.
   --enhanced-engine, -E                 Use alternate regex engine from
@@ -131,9 +134,9 @@ options:
   --file-ignore-regex Regex [Regex ...]
                                         Like --file-anti-regex but doesn't
                                         contribute to --count *-failed-files
-  --match-regex Regex [Regex ...]       A match from the Nth get regex must
-                                        match all regexes in the Nth group of
-                                        --match-regexes split along lone *'s.
+  --match-regex Regex [Regex ...]       Groups are split along lone *. Matches
+                                        from the Nth get regex are tested with
+                                        the Nth group
   --match-anti-regex Regex [Regex ...]  Like --match-regex but excludes
                                         matches that match any of the supplied
                                         regexes
@@ -174,12 +177,11 @@ options:
                                         Regex replacement
   --sub Regex [Regex ...], -R Regex [Regex ...]
                                         re.sub argument pairs after --replace
-                                        is applied (todo: explain advanced
-                                        usage here)
-  --name-sub Regex [Regex ...]          --sub but for printing file names.
-                                        Regex group 0 is before --print-full-
-                                        paths and --print-posix-paths, group 1
-                                        is after
+                                        is applied. Run `jrep.py --help --sub`
+                                        for more info
+  --name-sub Regex [Regex ...]          Applies --sub to file names. A lone *
+                                        separates subsitutions for y/z and
+                                        C:/x/y/z
   --dir-name-sub Regex [Regex ...]      --name-sub but for directory names
   --escape, -e                          Escape back slashes, newlines,
                                         carriage returns, and non-printable
@@ -209,6 +211,7 @@ options:
   --verbose, -v                         Verbose info
   --print-rundata, --print-run-data     Print raw runData JSON at the end
                                         (used for debugging)
+The following have extended help that can be seen with `--help [topic]`: sub, blockwise, order
 
 ```
 <!--</HELP MSG>-->

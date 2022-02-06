@@ -148,7 +148,51 @@ class CustomHelpFormatter(argparse.HelpFormatter):
 			text = text.split("\n")[0]
 		return lines
 
-parser=CustomArgumentParser(formatter_class=CustomHelpFormatter)
+_extendedHelp={
+	"sub":"""--sub advanced usage
+	The easiest way to explain advanced uses of `--sub` is to give an example. So take `--sub a ? b ? c d e f + x ? y z * ? t ? e d * abc xyz` as an example.  
+	What it means is the following:
+
+	- `a ? b ? c d e f`: If a match from get regex 0 matches `a` and not `b`, replace `c` with `d` and `e` with `f`
+	- `+`: New conditions but stay on the same get regex
+	- `x ? y z`: If a match from get regex 0 matches `x`, replace `y` with `z`
+	- `*`: Move on to the next get regex
+	- `? t ? e d`: If a match from get regex 1 does't match `t`, replace `e` with `d`
+	- `*`: Move on to the next get regex
+	- `abc xyz`: Replace `abc` with `xyz` without any conditions
+
+	Obviously 99% of use cases don't need conditionals at all so just doing `--sub abc def * uvw xyz` is sufficient""",
+
+	"blockwise":"""Blockwise sorting
+	You know how Windows will list `abc2.jpg` before `abc10.jpg` despite, when comparing the two names as strings, most sorting keys (the functions sorting algorithms use to compare elements) will do it the other way around? Blockwise sort is designed to mimic that but more generally
+	When comparing two filenames, it first splits each name into a list of number and non-number parts. (Ex: `"abc123xyz789"` -> `["abc", "123", "xyz", "789"]`)  
+	It then compares the lists element-by-element. If both lists have a number at at a certain index, it'll compare them as numbers, otherwise they'll be compared as strings
+	Basically if you use numbers in filenames to sort files you don't need to bother with leading zeros""",
+
+	"order":f"""--order usage
+	- The default value for `--order` is {', '.join(DEFAULTORDER)}
+	- Changing the order of `sub`, `replace`, and `match-whole-lines` will work but will make next to no sense
+	- The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain"""
+}
+for topic in _extendedHelp:
+	_extendedHelp[topic]=_extendedHelp[topic].replace("\t", "  ")
+
+class CustomHelpAction(argparse._HelpAction):
+	def __init__(self, *args, **kwargs):
+		super(argparse._HelpAction, self).__init__(*args, **kwargs)
+	def __call__(self, parser, namespace, value, option_string=None):
+		if value:
+			if value in _extendedHelp:
+				print(_extendedHelp[value])
+			else:
+				print(f"Sorry, \"{value}\" has no extended help")
+		else:
+			parser.print_help()
+		print(f"The following have extended help that can be seen with `--help [topic]`: {', '.join(_extendedHelp)}")
+		parser.exit()
+
+parser=CustomArgumentParser(formatter_class=CustomHelpFormatter, add_help=False)
+parser.add_argument("--help", "-h", action=CustomHelpAction, nargs="?", default=argparse.SUPPRESS, help="show this help message and exit OR use `--help [topic]` for help with an option")
 
 parser.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", help="Regex(es) to process matches for (reffered to as \"get regexes\")")
 parser.add_argument("--string"                    , "-s", action="store_true"                   , help="Treat get regexes as strings. Doesn't apply to any other options.")
@@ -189,7 +233,7 @@ parser.add_argument("--file-regex"                ,       nargs="+", default=[],
 parser.add_argument("--file-anti-regex"           ,       nargs="+", default=[], metavar="Regex", action=FileRegexAction, help="Like --file-regex but excludes files that match of the supplied regexes")
 parser.add_argument("--file-ignore-regex"         ,       nargs="+", default=[], metavar="Regex", action=FileRegexAction, help="Like --file-anti-regex but doesn't contribute to --count *-failed-files")
 
-parser.add_argument("--match-regex"               ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="A match from the Nth get regex must match all regexes in the Nth group of --match-regexes split along lone *'s.")
+parser.add_argument("--match-regex"               ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Groups are split along lone *. Matches from the Nth get regex are tested with the Nth group")
 parser.add_argument("--match-anti-regex"          ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Like --match-regex but excludes matches that match any of the supplied regexes")
 parser.add_argument("--match-ignore-regex"        ,       nargs="+", default=[], metavar="Regex", action=MatchRegexAction, help="Like --match-anti-regex but doesn't contribute to --count *-failed-matches")
 
@@ -211,8 +255,8 @@ parser.add_argument("--print-match-offset"        , "-o", action="store_true"   
 parser.add_argument("--print-match-range"         , "-O", action="store_true"                   , help="Print where the match starts and ends in the file as a hexadecimal number (implies -o)")
 
 parser.add_argument("--replace"                   , "-r", nargs="+", default=[], metavar="Regex", help="Regex replacement")
-parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="re.sub argument pairs after --replace is applied (todo: explain advanced usage here)")
-parser.add_argument("--name-sub"                  ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--sub but for printing file names. Regex group 0 is before --print-full-paths and --print-posix-paths, group 1 is after")
+parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="re.sub argument pairs after --replace is applied. Run `jrep.py --help --sub` for more info")
+parser.add_argument("--name-sub"                  ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="Applies --sub to file names. A lone * separates subsitutions for y/z and C:/x/y/z")
 parser.add_argument("--dir-name-sub"              ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--name-sub but for directory names")
 parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Escape back slashes, newlines, carriage returns, and non-printable characters")
 
