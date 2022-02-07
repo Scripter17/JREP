@@ -234,7 +234,6 @@ What it means is the following
 - `abc xyz`: Replace `abc` with `xyz` without any conditions  
   
 Obviously 99% of use cases don't need conditionals at all so just doing `--sub abc def * uvw xyz` is sufficient
-The following have extended help that can be seen with --help [topic]: sub, blockwise, order
 
 ## (`blockwise`) Blockwise sorting
 A generic sort function will think "file10.jpg" comes before "file2.jpg"  
@@ -245,12 +244,10 @@ Blockwise sort mimics this behaviour by
 	1. If either block is made of non-number characters, compare the two blocks as strings  
 	2. If both blocks are numbers, compare them as numbers  
 The end result is that file2.jpg is correctly placed before file10.jpg
-The following have extended help that can be seen with --help [topic]: sub, blockwise, order
 
 ## (`order`) `--order` usage
 `--order` determines the order of functions that process matches  
 - The default value for `--order` is replace, match-whole-lines, sub, match-regex, no-name-duplicates, no-duplicates, print-dir, print-name, print-matches  
 - Changing the order of `sub`, `replace`, and `match-whole-lines` will mostly "work" but the output will make next to no sense  
 - The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain
-The following have extended help that can be seen with --help [topic]: sub, blockwise, order
 <!--</EXTHELP MSGS>-->

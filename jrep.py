@@ -197,7 +197,8 @@ class CustomHelpAction(argparse._HelpAction):
 				print(f"Sorry, \"{value}\" has no extended help")
 		else:
 			parser.print_help()
-		print(f"The following have extended help that can be seen with --help [topic]: {', '.join(_extendedHelp)}")
+		if "JREP_MARKDOWN" not in os.environ:
+			print(f"The following have extended help that can be seen with --help [topic]: {', '.join(_extendedHelp)}")
 		parser.exit()
 
 parser=CustomArgumentParser(formatter_class=CustomHelpFormatter, add_help=False)
