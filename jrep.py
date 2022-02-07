@@ -149,7 +149,7 @@ class CustomHelpFormatter(argparse.HelpFormatter):
 		return lines
 
 _extendedHelp={
-	"sub":"""--sub advanced usage
+	"sub":"""--sub advanced usage:
 	The easiest way to explain advanced uses of `--sub` is to give an example. So take `--sub a ? b ? c d e f + x ? y z * ? t ? e d * abc xyz` as an example.  
 	What it means is the following:
 
@@ -163,19 +163,28 @@ _extendedHelp={
 
 	Obviously 99% of use cases don't need conditionals at all so just doing `--sub abc def * uvw xyz` is sufficient""",
 
-	"blockwise":"""Blockwise sorting
-	You know how Windows will list `abc2.jpg` before `abc10.jpg` despite, when comparing the two names as strings, most sorting keys (the functions sorting algorithms use to compare elements) will do it the other way around? Blockwise sort is designed to mimic that but more generally
-	When comparing two filenames, it first splits each name into a list of number and non-number parts. (Ex: `"abc123xyz789"` -> `["abc", "123", "xyz", "789"]`)  
-	It then compares the lists element-by-element. If both lists have a number at at a certain index, it'll compare them as numbers, otherwise they'll be compared as strings
-	Basically if you use numbers in filenames to sort files you don't need to bother with leading zeros""",
+	"blockwise":"""Blockwise sorting:
+	A generic sort function will think "file10.jpg" comes before "file2.jpg"
+	Windows, on the other hand, has code that treats the number part as a number
+	Blockwise sort mimics this behaviour by
+	1. Splitting filenames into groups of number and non-number characters. Ex. `abc123def456.jpg` -> `["abc", "123", "def", "456", ".jpg"]`
+	2. When comparing 2 filenames, compare the first element ("block") of both name's lists according to the following two rules:
+	\ta. If either block is made of non-number characters, compare the two blocks as strings
+	\tb. If both blocks are numbers, compare them as numbers
+	The end result is that file2.jpg is correctly placed before file10.jpg""",
 
-	"order":f"""--order usage
+	"order":f"""`--order` usage:
+	`--order` determines the order of functions that process matches
 	- The default value for `--order` is {', '.join(DEFAULTORDER)}
-	- Changing the order of `sub`, `replace`, and `match-whole-lines` will work but will make next to no sense
+	- Changing the order of `sub`, `replace`, and `match-whole-lines` will mostly "work" but the output will make next to no sense
 	- The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain"""
 }
 for topic in _extendedHelp:
-	_extendedHelp[topic]=_extendedHelp[topic].replace("\t", "  ")
+	if "JREP_MARKDOWN" in os.environ:
+		_extendedHelp[topic]="## (`"+topic+"`) "+_extendedHelp[topic].replace("\n", "  \n").replace(":  ", "").replace("\n\t", "\n")
+		_extendedHelp[topic]=re.sub(r"(?<=\n\t)([a-z])(?=\.)", lambda x:str("ABCDEFGHIJKLMNOPQRSTUVWXYZ".index(x[0].upper())+1), _extendedHelp[topic])
+	else:
+		_extendedHelp[topic]=_extendedHelp[topic].replace("`", "").replace("\t", "  ")
 
 class CustomHelpAction(argparse._HelpAction):
 	def __init__(self, *args, **kwargs):
@@ -188,11 +197,11 @@ class CustomHelpAction(argparse._HelpAction):
 				print(f"Sorry, \"{value}\" has no extended help")
 		else:
 			parser.print_help()
-		print(f"The following have extended help that can be seen with `--help [topic]`: {', '.join(_extendedHelp)}")
+		print(f"The following have extended help that can be seen with --help [topic]: {', '.join(_extendedHelp)}")
 		parser.exit()
 
 parser=CustomArgumentParser(formatter_class=CustomHelpFormatter, add_help=False)
-parser.add_argument("--help", "-h", action=CustomHelpAction, nargs="?", default=argparse.SUPPRESS, help="show this help message and exit OR use `--help [topic]` for help with an option")
+parser.add_argument("--help", "-h", action=CustomHelpAction, nargs="?", default=argparse.SUPPRESS, help="show this help message and exit OR use `--help [topic]` for help with [topic]")
 
 parser.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", help="Regex(es) to process matches for (reffered to as \"get regexes\")")
 parser.add_argument("--string"                    , "-s", action="store_true"                   , help="Treat get regexes as strings. Doesn't apply to any other options.")
