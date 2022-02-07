@@ -153,7 +153,8 @@ options:
   --sort SORT, -S SORT                  Sort files by ctime, mtime, atime,
                                         name, or size. Prefix key with "r" to
                                         reverse. A windows-esque "blockwise"
-                                        sort is also available (see README)
+                                        sort is also available. Run jrep
+                                        --help blockwise for more info
   --sort-regex Regex [Regex ...]        Regexes to apply to file names keys
                                         (like --replace) for purposes of
                                         sorting (EXPERIMENTAL)
@@ -176,8 +177,8 @@ options:
                                         Regex replacement
   --sub Regex [Regex ...], -R Regex [Regex ...]
                                         re.sub argument pairs after --replace
-                                        is applied. Run `jrep.py --help --sub`
-                                        for more info
+                                        is applied. Run jrep.py --help sub for
+                                        more info
   --name-sub Regex [Regex ...]          Applies --sub to file names. A lone *
                                         separates subsitutions for y/z and
                                         C:/x/y/z
@@ -206,7 +207,8 @@ options:
                                         second results, etc.)
   --strict-weave, -W                    Only print full weave sets
   --order ORDER [ORDER ...]             The order in which modifications to
-                                        matches are applied (see README)
+                                        matches are applied. Run jrep --help
+                                        order for more info
   --verbose, -v                         Verbose info
   --print-rundata, --print-run-data     Print raw runData JSON at the end
                                         (used for debugging)

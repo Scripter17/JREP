@@ -252,7 +252,7 @@ parser.add_line()
 parser.add_argument("--no-duplicates"             , "-D", action="store_true"                   , help="Don't print duplicate matches (See also: --order)")
 parser.add_argument("--no-name-duplicates"        ,       action="store_true"                   , help="Don't process files whose names have already been processed (takes --name-sub, --print-full-paths and --print-posix-paths)")
 
-parser.add_argument("--sort"                      , "-S",                                         help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available (see README)")
+parser.add_argument("--sort"                      , "-S",                                         help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available. Run jrep --help blockwise for more info")
 parser.add_argument("--sort-regex"                ,       nargs="+", default=[], metavar="Regex", help="Regexes to apply to file names keys (like --replace) for purposes of sorting (EXPERIMENTAL)")
 parser.add_argument("--no-headers"                , "-H", action="store_true"                   , help="Don't print match: or file: before lines")
 parser.add_argument("--print-directories"         , "-d", action="store_true"                   , help="Print names of explored directories")
@@ -264,7 +264,7 @@ parser.add_argument("--print-match-offset"        , "-o", action="store_true"   
 parser.add_argument("--print-match-range"         , "-O", action="store_true"                   , help="Print where the match starts and ends in the file as a hexadecimal number (implies -o)")
 
 parser.add_argument("--replace"                   , "-r", nargs="+", default=[], metavar="Regex", help="Regex replacement")
-parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="re.sub argument pairs after --replace is applied. Run `jrep.py --help --sub` for more info")
+parser.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="re.sub argument pairs after --replace is applied. Run jrep.py --help sub for more info")
 parser.add_argument("--name-sub"                  ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="Applies --sub to file names. A lone * separates subsitutions for y/z and C:/x/y/z")
 parser.add_argument("--dir-name-sub"              ,       nargs="+", default=[], metavar="Regex", action=SubRegexAction, help="--name-sub but for directory names")
 parser.add_argument("--escape"                    , "-e", action="store_true"                   , help="Escape back slashes, newlines, carriage returns, and non-printable characters")
@@ -283,7 +283,7 @@ parser.add_argument("--hard-warn"                 ,       action="store_true"   
 parser.add_argument("--weave-matches"             , "-w", action="store_true"                      , help="Weave regex matchdes (print first results for each get regex, then second results, etc.)")
 parser.add_argument("--strict-weave"              , "-W", action="store_true"                      , help="Only print full weave sets")
 
-parser.add_argument("--order"                     ,       nargs="+", default=DEFAULTORDER          , help="The order in which modifications to matches are applied (see README)")
+parser.add_argument("--order"                     ,       nargs="+", default=DEFAULTORDER          , help="The order in which modifications to matches are applied. Run jrep --help order for more info")
 
 parser.add_argument("--verbose"                   , "-v", action="store_true"                      , help="Verbose info")
 parser.add_argument("--print-rundata"             , "--print-run-data", action="store_true"        , help="Print raw runData JSON at the end (used for debugging)")
