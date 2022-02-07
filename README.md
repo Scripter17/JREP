@@ -243,6 +243,7 @@ Blockwise sort mimics this behaviour by
 2. When comparing 2 filenames, compare the first element ("block") of both name's lists according to the following two rules
 	1. If either block is made of non-number characters, compare the two blocks as strings  
 	2. If both blocks are numbers, compare them as numbers  
+  
 The end result is that file2.jpg is correctly placed before file10.jpg
 
 ## (`order`) `--order` usage

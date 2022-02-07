@@ -171,6 +171,7 @@ _extendedHelp={
 	2. When comparing 2 filenames, compare the first element ("block") of both name's lists according to the following two rules:
 	\ta. If either block is made of non-number characters, compare the two blocks as strings
 	\tb. If both blocks are numbers, compare them as numbers
+
 	The end result is that file2.jpg is correctly placed before file10.jpg""",
 
 	"order":f"""`--order` usage:
