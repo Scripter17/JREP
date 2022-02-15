@@ -10,6 +10,10 @@ import argparse, os, sys, re, glob, mmap, copy, itertools, functools, sre_parse,
 
 DEFAULTORDER=["replace", "match-whole-lines", "sub", "match-regex", "no-name-duplicates", "no-duplicates", "print-dir", "print-name", "print-matches"]
 
+_STDIN=b""
+if not os.isatty(sys.stdin.fileno()):
+	_STDIN=sys.stdin.buffer.read()
+
 class JSObj:
 	"""
 		[J]ava[S]cript [Obj]ects
@@ -215,6 +219,8 @@ parser.add_argument("--glob"                      , "-g", nargs="+", default=[] 
 _stdin=parser.add_mutually_exclusive_group()
 _stdin.add_argument("--stdin-files"               , "-F", action="store_true"                   , help="Treat STDIN as a list of files")
 _stdin.add_argument("--stdin-globs"               , "-G", action="store_true"                   , help="Treat STDIN as a list of globs")
+_stdin.add_argument("--stdin-anti-match-strings"  ,       action="store_true"                   , help="Treat STDIN as a list of strings to not match")
+#_stdin.add_argument("--stdin-option"              ,                                               help="Append STDIN lines to the end of any option (drop the -- at the start)")
 
 parser.add_line()
 parser.add_line()
@@ -308,7 +314,16 @@ def warn(x, error=None):
 
 verbose("JREP preview version")
 verbose(parsedArgs)
- 
+
+# if parsedArgs.stdin_option_name:
+# 	_optname=parsedArgs.stdin_option_name
+# 	if not isinstance(parsedArgs.__getattribute__(_optname), list):
+# 		warn("Error: Cannot appent STDIN lines to non=list option")
+# 		exit(2)
+# 	for x in parser._actions:
+# 		print(x, dir(x))
+# 	#object.__setattr__(parsedArgs, _optname, parsedArgs.__getattribute__(_optname)+_STDIN.decode().splitlines())
+
 if parsedArgs.enhanced_engine:
 	import regex as re
 
@@ -455,6 +470,20 @@ def _glob1(dirname, pattern, dir_fd, dironly):
 			break
 glob._glob1=_glob1
 
+def _rlistdir(dirname, dir_fd, dironly):
+	global doneDir
+	names = glob._listdir(dirname, dir_fd, dironly)
+	for x in names:
+		if not glob._ishidden(x):
+			yield x
+			path = glob._join(dirname, x) if dirname else x
+			for y in _rlistdir(path, dir_fd, dironly):
+				yield glob._join(x, y)
+				if doneDir:
+					doneDir=False
+					break
+glob._rlistdir=_rlistdir
+
 # Dumb output fstring generation stuff
 _header=not parsedArgs.no_headers
 _mOffs1=parsedArgs.print_match_offset or parsedArgs.print_match_range
@@ -483,7 +512,7 @@ def handleCount(rules, runData):
 	def handleTotals(regexIndex, value):
 		print(f"{keyCat.title()} {keySubCatPlural} (R{regexIndex}): "*_header+f"{value}")
 
-	def handleFiltereds(regexIndex):
+	def handleFiltereds(regexIndex, key):
 		if regexIndex=="*":
 			filterCount=runData[keyCat][keySubCatFilter+keySubCat]
 			divisor=runData[keyCat]['total'+keySubCat]
@@ -504,10 +533,14 @@ def handleCount(rules, runData):
 			keyCat         =cats[key[0]]
 			keySubCatPlural=catPlurals[key[1]]
 			keySubCat      =keySubCatPlural.title()
-			if key[2] in filters:
+
+			# Get keySubCatFilter, default to "passed"
+			if len(key)>=3 and key[2] in filters:
 				keySubCatFilter=filters[key[2]]
 			else:
-				keySubCatFilter="total"
+				keySubCatFilter="passed"
+			if len(key)<3:
+				key+="p"
 
 			if re.match(r"^..t?$", key):
 				handleTotals("*", runData[keyCat][keySubCatFilter+keySubCat])
@@ -515,10 +548,10 @@ def handleCount(rules, runData):
 				for regexIndex, value in enumerate(runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"]):
 					handleTotals(regexIndex, value)
 			elif re.match(r"^..[phf][cp]?t?$", key):
-				handleFiltereds("*")
+				handleFiltereds("*", key)
 			elif re.match(r"^..[phf][cp]?r$", key):
 				for regexIndex, value in enumerate(runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"]):
-					handleFiltereds(regexIndex)
+					handleFiltereds(regexIndex, key)
 
 @functools.cache
 def _blockwiseSort(x, y):
@@ -617,8 +650,8 @@ def getFiles():
 		# Files
 		verbose("Yielding STDIN files")
 		# --stdin-files
-		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_files:
-			yield from sys.stdin.read().splitlines()
+		if _STDIN and parsedArgs.stdin_files:
+			yield from _STDIN.splitlines()
 		# --file
 
 		verbose("Yielding files")
@@ -627,8 +660,8 @@ def getFiles():
 		# Globs
 		verbose("Yielding STDIN globs")
 		# --stdin-globs
-		if not os.isatty(sys.stdin.fileno()) and parsedArgs.stdin_globs:
-			for pattern in sys.stdin.read().splitlines():
+		if not _STDIN and parsedArgs.stdin_globs:
+			for pattern in _STDIN.splitlines():
 				yield from advancedGlob(pattern, recursive=True)
 		# --glob
 		verbose("Yielding globs")
@@ -638,7 +671,7 @@ def getFiles():
 	# Add stdin as a file
 	if not os.isatty(sys.stdin.fileno()) and not parsedArgs.stdin_files and not parsedArgs.stdin_globs:
 		verbose("Processing STDIN")
-		yield {"name":"-", "basename":"-", "relDir":"", "absDir":"", "data":sys.stdin.read().encode(errors="ignore"), "isDir": False, "stdin": True}
+		yield {"name":"-", "basename":"-", "relDir":"", "absDir":"", "data":_STDIN, "isDir": False, "stdin": True}
 
 	for file in _getFiles():
 		verbose(f"Pre-processing \"{file}\"")
@@ -864,7 +897,10 @@ def funcMatchRegex(parsedArgs, match, regexIndex, **kwargs):
 	"""
 		Handle --match-regex and --match-anti-regex
 	"""
-	matchRegexResult=regexCheckerThing(
+	stdinThing=False
+	if parsedArgs.stdin_anti_match_strings and _STDIN:
+		stdinThing=match[0] in _STDIN.splitlines()
+	matchRegexResult=not stdinThing and regexCheckerThing(
 		match[0],
 		              parsedArgs.match_regex       [regexIndex] if parsedArgs.match_regex        else [],
 		              parsedArgs.match_anti_regex  [regexIndex] if parsedArgs.match_anti_regex   else [],

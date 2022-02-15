@@ -11,7 +11,7 @@ For details, [check below](#details)
 ```
 usage: jrep.py [--help [HELP]] [--string] [--enhanced-engine]
                [--file FILE [FILE ...]] [--glob GLOB [GLOB ...]]
-               [--stdin-files | --stdin-globs]
+               [--stdin-files | --stdin-globs | --stdin-anti-match-strings]
                [--name-regex Regex [Regex ...]]
                [--name-anti-regex Regex [Regex ...]]
                [--name-ignore-regex Regex [Regex ...]]
@@ -68,6 +68,8 @@ options:
                                         A list of globs to check
   --stdin-files, -F                     Treat STDIN as a list of files
   --stdin-globs, -G                     Treat STDIN as a list of globs
+  --stdin-anti-match-strings            Treat STDIN as a list of strings to
+                                        not match
                                         
                                         
   --name-regex Regex [Regex ...], -t Regex [Regex ...]
