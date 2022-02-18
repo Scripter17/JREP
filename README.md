@@ -48,6 +48,8 @@ usage: jrep.py [--help [HELP]] [--string] [--enhanced-engine]
                [--depth-first] [--glob-root-dir GLOB_ROOT_DIR]
                [--match-whole-lines] [--print-non-matching-files] [--no-warn]
                [--hard-warn] [--weave-matches] [--strict-weave]
+               [--pre-match-exec cmd] [--match-exec cmd] [--pre-file-exec cmd]
+               [--file-exec cmd] [--pre-dir-exec cmd] [--dir-exec cmd]
                [--order ORDER [ORDER ...]] [--verbose] [--print-rundata]
                [Regex ...]
 
@@ -208,13 +210,25 @@ options:
                                         results for each get regex, then
                                         second results, etc.)
   --strict-weave, -W                    Only print full weave sets
+  --pre-match-exec cmd                  Command to run before printing each
+                                        match
+  --match-exec cmd                      Command to run after printing each
+                                        match
+  --pre-file-exec cmd                   Command to run before printing each
+                                        file name
+  --file-exec cmd                       Command to run after printing each
+                                        file name
+  --pre-dir-exec cmd                    Command to run before printing each
+                                        dir name
+  --dir-exec cmd                        Command to run after printing each dir
+                                        name
   --order ORDER [ORDER ...]             The order in which modifications to
                                         matches are applied. Run jrep --help
                                         order for more info
   --verbose, -v                         Verbose info
   --print-rundata, --print-run-data     Print raw runData JSON at the end
                                         (used for debugging)
-The following have extended help that can be seen with --help [topic]: sub, blockwise, order
+The following have extended help that can be seen with --help [topic]: sub, blockwise, order, exec
 ```
 <!--</HELP MSG>-->
 
@@ -250,7 +264,16 @@ The end result is that file2.jpg is correctly placed before file10.jpg
 
 ## (`order`) `--order` usage
 `--order` determines the order of functions that process matches  
-- The default value for `--order` is replace, match-whole-lines, sub, match-regex, no-name-duplicates, no-duplicates, print-dir, print-name, print-matches  
+- The default value for `--order` is replace, match-whole-lines, sub, match-regex, no-name-duplicates, no-duplicates, print-dir, print-name, print-match  
 - Changing the order of `sub`, `replace`, and `match-whole-lines` will mostly "work" but the output will make next to no sense  
 - The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain
+
+## (`exec`) Using the `--exec` family of options
+Usage looks like `--exec "echo {}"` or just `--exec "echo"`  
+`--match-exec`/`--exec`: after  printing matches  
+`--pre-match-exec`: before printing matches  
+`--match-exec`: after  printing file names  
+`--pre-match-exec`: before printing file names  
+`--dir-exec`: after  printing directory names  
+`--pre-dir-exec`: before printing directory names
 <!--</EXTHELP MSGS>-->

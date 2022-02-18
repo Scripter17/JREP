@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
-import os, sys, shutil
+import os, sys, shutil, subprocess as sp
 import re, glob, fnmatch, copy, json
 import mmap, itertools, functools, sre_parse, inspect
 
@@ -18,7 +18,17 @@ import mmap, itertools, functools, sre_parse, inspect
 if not hasattr(functools, "cache"):
 	functools.cache=functools.lru_cache(maxsize=None)
 
-DEFAULTORDER=["replace", "match-whole-lines", "sub", "match-regex", "no-name-duplicates", "no-duplicates", "print-dir", "print-name", "print-matches"]
+DEFAULTORDER=[
+	"replace",
+	"match-whole-lines",
+	"sub",
+	"match-regex",
+	"no-name-duplicates",
+	"no-duplicates",
+	"print-dir",
+	"print-name",
+	"print-match",
+]
 
 _STDIN=b""
 if not os.isatty(sys.stdin.fileno()):
@@ -186,7 +196,17 @@ _extendedHelp={
 	`--order` determines the order of functions that process matches
 	- The default value for `--order` is {', '.join(DEFAULTORDER)}
 	- Changing the order of `sub`, `replace`, and `match-whole-lines` will mostly "work" but the output will make next to no sense
-	- The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain"""
+	- The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain""",
+
+	# exec
+	"exec":"""Using the `--exec` family of options:
+	Usage looks like `--exec "echo {}"` or just `--exec "echo"`
+	`--match-exec`/`--exec`: after  printing matches
+	`--pre-match-exec`     : before printing matches
+	`--match-exec`         : after  printing file names
+	`--pre-match-exec`     : before printing file names
+	`--dir-exec`           : after  printing directory names
+	`--pre-dir-exec`       : before printing directory names""",
 }
 for topic in _extendedHelp:
 	# Edits _extendedHelp to make generating the README easier
@@ -194,6 +214,7 @@ for topic in _extendedHelp:
 	if "JREP_MARKDOWN" in os.environ:
 		_extendedHelp[topic]="## (`"+topic+"`) "+_extendedHelp[topic].replace("\n", "  \n").replace(":  ", "").replace("\n\t", "\n")
 		_extendedHelp[topic]=re.sub(r"(?<=\n\t)([a-z])(?=\.)", lambda x:str("ABCDEFGHIJKLMNOPQRSTUVWXYZ".index(x[0].upper())+1), _extendedHelp[topic])
+		_extendedHelp[topic]=re.sub(r"\s+:", ":", _extendedHelp[topic])
 	else:
 		_extendedHelp[topic]=_extendedHelp[topic].replace("`", "").replace("\t", "  ")
 
@@ -299,6 +320,13 @@ parser.add_argument("--hard-warn"                 ,       action="store_true"   
 parser.add_argument("--weave-matches"             , "-w", action="store_true"                      , help="Weave regex matchdes (print first results for each get regex, then second results, etc.)")
 parser.add_argument("--strict-weave"              , "-W", action="store_true"                      , help="Only print full weave sets")
 
+parser.add_argument("--pre-match-exec"            ,                                   metavar="cmd", help="Command to run before printing each match")
+parser.add_argument("--match-exec"                ,                                   metavar="cmd", help="Command to run after  printing each match")
+parser.add_argument("--pre-file-exec"             ,                                   metavar="cmd", help="Command to run before printing each file name")
+parser.add_argument("--file-exec"                 ,                                   metavar="cmd", help="Command to run after  printing each file name")
+parser.add_argument("--pre-dir-exec"              ,                                   metavar="cmd", help="Command to run before printing each dir name")
+parser.add_argument("--dir-exec"                  ,                                   metavar="cmd", help="Command to run after  printing each dir name")
+
 parser.add_argument("--order"                     ,       nargs="+", default=DEFAULTORDER          , help="The order in which modifications to matches are applied. Run jrep --help order for more info")
 
 parser.add_argument("--verbose"                   , "-v", action="store_true"                      , help="Verbose info")
@@ -322,6 +350,7 @@ verbose("JREP preview version")
 verbose(parsedArgs)
 
 if parsedArgs.enhanced_engine:
+	# Arbitary length lookbehinds :florshed:
 	import regex as re
 
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
@@ -745,18 +774,6 @@ def escape(match):
 		return ret
 	return match
 
-def printMatch(match, regexIndex):
-	"""
-		Print matches
-		Not much else to say
-	"""
-	if match is None:
-		return
-	sys.stdout.buffer.write(ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
-	sys.stdout.buffer.write(escape(match[0]))
-	sys.stdout.buffer.write(b"\n")
-	sys.stdout.buffer.flush()
-
 # Keeping everything like this makes life easier
 # It's a mess but the alternative is worse
 runData={
@@ -947,34 +964,70 @@ def funcMatchRegex(parsedArgs, match, regexIndex, **kwargs):
 	elif matchRegexResult is None:
 		raise NextFile()
 
+def execHandler(cmd, arg):
+	"""
+		Handle the --exec family of options
+		sp.run(b"echo This doesn't work on Windows for some reason")
+	"""
+	if cmd is None:
+		return
+	if isinstance(cmd, bytes): cmd=cmd.decode()
+	if isinstance(arg, bytes): arg=arg.decode()
+	if "{}" not in cmd:
+		cmd+=" {}"
+	cmd=cmd.replace("{}", arg)
+	sp.run(cmd, shell=True)
+
 def funcPrintDir(parsedArgs, runData, currDir, **kwargs):
 	"""
 		Handle --print-directories
 	"""
-	if parsedArgs.print_directories and not runData["dir"]["printedName"]:
+	if runData["dir"]["printedName"]:
+		return
+	execHandler(parsedArgs.pre_dir_exec, currDir)
+	if parsedArgs.print_directories:
 		sys.stdout.buffer.write(b"Directory: "*_header+processDirName(runData["currDir"])+b"\n")
 		sys.stdout.buffer.flush()
 		runData["dir"]["printedName"]=True
+	execHandler(parsedArgs.dir_exec, currDir)
 
 def funcPrintName(parsedArgs, file, runData, **kwargs):
 	"""
 		Handle --print-names
 	"""
-	if parsedArgs.print_file_names and not runData["file"]["printedName"]:
+	if runData["file"]["printedName"]:
+		return
+	execHandler(parsedArgs.pre_file_exec, file["name"])
+	if parsedArgs.print_file_names:
 		sys.stdout.buffer.write(b"File: "*_header+processFileName(file["name"]))
 		sys.stdout.buffer.write(b"\n")
 		sys.stdout.buffer.flush()
 	runData["file"]["printedName"]=True
+	execHandler(parsedArgs.file_exec, file["name"])
 
-def funcPrintMatches(parsedArgs, file, regexIndex, match, **kwargs):
+def printMatch(match, regexIndex):
+	"""
+		Print matches
+		Not much else to say
+	"""
+	if match is None:
+		return
+	execHandler(parsedArgs.pre_match_exec, match[0])
+	if not parsedArgs.dont_print_matches:
+		sys.stdout.buffer.write(ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
+		sys.stdout.buffer.write(escape(match[0]))
+		sys.stdout.buffer.write(b"\n")
+		sys.stdout.buffer.flush()
+	execHandler(parsedArgs.match_exec, match[0])
+
+def funcPrintMatch(parsedArgs, file, regexIndex, match, **kwargs):
 	"""
 		Print matches
 	"""
-	if not parsedArgs.dont_print_matches:
-		if parsedArgs.weave_matches:
-			runData["file"]["matches"][regexIndex].append(match)
-		else:
-			printMatch(match, regexIndex)
+	if parsedArgs.weave_matches:
+		runData["file"]["matches"][regexIndex].append(match)
+	else:
+		printMatch(match, regexIndex)
 
 def funcNoDuplicates(parsedArgs, match, **kwargs):
 	"""
@@ -1007,7 +1060,7 @@ funcs={
 	"match-whole-lines" : funcMatchWholeLines,
 	"match-regex"       : funcMatchRegex,
 	"print-name"        : funcPrintName,
-	"print-matches"     : funcPrintMatches,
+	"print-match"       : funcPrintMatch,
 	"no-duplicates"     : funcNoDuplicates,
 	"no-name-duplicates": funcNoNameDuplicates,
 }
