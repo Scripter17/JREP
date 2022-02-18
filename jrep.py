@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import argparse
 import os, sys, shutil
 import re, glob, fnmatch, copy, json
@@ -12,6 +14,9 @@ import mmap, itertools, functools, sre_parse, inspect
 	https://dbad-license.org
 	(Can be treated as public domain if your project requires that)
 """
+
+if not hasattr(functools, "cache"):
+	functools.cache=functools.lru_cache(maxsize=None)
 
 DEFAULTORDER=["replace", "match-whole-lines", "sub", "match-regex", "no-name-duplicates", "no-duplicates", "print-dir", "print-name", "print-matches"]
 
