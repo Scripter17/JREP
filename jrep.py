@@ -1,8 +1,13 @@
-import argparse, os, sys, re, glob, mmap, copy, itertools, functools, sre_parse, inspect, json, shutil, fnmatch
+import argparse
+import os, sys, shutil
+import re, glob, fnmatch, copy, json
+import mmap, itertools, functools, sre_parse, inspect
 
 """
-	JREP
+	JREP - "Just Release mE Please (I've been in pre-alpha for 6 months)"
 	Made by Github@Scripter17 / Reddit@Scripter17 / Twitter@Scripter171
+	Official repo: https://github.com/Scripter17/JREP
+
 	Released under the "Don't Be a Dick" public license
 	https://dbad-license.org
 	(Can be treated as public domain if your project requires that)
@@ -18,7 +23,7 @@ class JSObj:
 	"""
 		[J]ava[S]cript [Obj]ects
 		JavaScript allows both {"a":1}.a and {"a":1}["a"]
-		This class mimicks that
+		This class mimicks that to make mutilating re.Match objects easier
 	"""
 	def __init__(self, obj, default=None):
 		object.__setattr__(self, "obj"    , obj)
@@ -34,9 +39,8 @@ class JSObj:
 
 	def keys(self): return self.obj.keys() # Makes **JSObj work
 
-def _LCNameRegexPart(*opts):
-	# Helper function for generating the --limiy/--count parser regex
-	return "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
+# Helper function for generating the --limiy/--count parser regex
+_LCNameRegexPart=lambda *opts: "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
 _LCNameRegex=_LCNameRegexPart(r"files?"       , r"dir(?:ectori(?:es|y))?", r"total"                             )    +r"[-_]?"+\
              _LCNameRegexPart(r"match(?:e?s)?", r"files?"                , r"dir(?:ectori(?:es|y))?"            )    +r"[-_]?"+\
              _LCNameRegexPart(r"total"        , r"fail(?:u(?:re)?s?|d)"  , r"pass(?:e?[sd])?"       , "handled?")+"?"+r"[-_]?"+\
@@ -48,18 +52,16 @@ def parseLCName(name):
 	"""
 		Normalize all ways --limit or --count targets can be written
 	"""
-	ret=name
 	match=re.match(_LCNameRegex, name, re.I)
 	if match:
-		ret="".join(filter(lambda x:x, match.groups())).lower()
-	return ret
+		return "".join(filter(lambda x:x, match.groups())).lower()
+	return name
 
 class LimitAction(argparse.Action):
 	"""
 		Pre-processor for --limit targets
 	"""
 	def __call__(self, parser, namespace, values, option_string):
-		# Very jank
 		ret=JSObj({}, default=0)
 		for name, value in map(lambda x:x.split("="), values):
 			ret[parseLCName(name)]=int(value)
@@ -71,30 +73,6 @@ class CountAction(argparse.Action):
 	"""
 	def __call__(self, parser, namespace, values, option_string):
 		setattr(namespace, self.dest, list(map(parseLCName, values)))
-
-class MatchRegexAction(argparse.Action):
-	"""
-		Pre-processor for --match-regex and --match-anti-regex
-		These options take a list of arguments
-		An argument of just * means that the following arguments should be applied to the next parsedArgs.regex
-	"""
-	def __call__(self, parser, namespace, values, option_string):
-		ret=[[]]
-		for x in values:
-			if x=="*":
-				ret.append([])
-			else:
-				ret[-1].append(x.encode())
-		setattr(namespace, self.dest, ret)
-
-def listRindex(arr, needle):
-	"""
-		str.rindex but for lists. I doubt I need to say much else
-	"""
-	for i in range(len(arr)-1, -1, -1):
-		if arr[i]==needle:
-			return i
-	raise ValueError("Lists not having rindex, find, or rfind is dumb")
 
 def listSplit(arr, needle):
 	"""
@@ -108,9 +86,18 @@ def listSplit(arr, needle):
 			ret[-1].append(x)
 	return ret
 
+class MatchRegexAction(argparse.Action):
+	"""
+		Pre-processor for --match-regex stuff
+		These options take a list of arguments
+		An argument of just * means that the following arguments should be applied to the next parsedArgs.regex
+	"""
+	def __call__(self, parser, namespace, values, option_string):
+		setattr(namespace, self.dest, listSplit(values, "*"))
+
 class SubRegexAction(argparse.Action):
 	"""
-		Pre-processor for replacement regexes
+		Pre-processor for --sub stuff
 		These options take a list of arguments
 		a ? b ? c d e f + x ? y z * ? t ? e d
 		If a match from get regex 0 matches /a/ and not /b/, replace c with d and e with f
@@ -128,21 +115,30 @@ class SubRegexAction(argparse.Action):
 				elif len(thingParts)==2: thingParts=[thingParts[0], [], thingParts[1]]
 				parsed["tests"    ]=[x.encode() for x in thingParts[0]      ]
 				parsed["antiTests"]=[x.encode() for x in thingParts[1]      ]
-				parsed["patterns" ]=[x.encode() for x in thingParts[2][0::2]]
-				parsed["repls"    ]=[x.encode() for x in thingParts[2][1::2]]
+				parsed["patterns" ]=[x.encode() for x in thingParts[2][0::2]] # Even elems
+				parsed["repls"    ]=[x.encode() for x in thingParts[2][1::2]] # Odd  elems
 				ret[-1].append(parsed)
 		setattr(namespace, self.dest, ret)
 
 class FileRegexAction(argparse.Action):
+	"""
+		Pre-processor for --file-regex stuff
+	"""
 	def __call__(self, parser, namespace, values, option_string):
 		values=[x.encode() for x in values]
 		setattr(namespace, self.dest, values)
 
 class CustomArgumentParser(argparse.ArgumentParser):
+	"""
+		A jank implementation for adding blank lines to --help
+	"""
 	def add_line(self, text=""):
 		self._actions[-1].help+="\n"+text
 
 class CustomHelpFormatter(argparse.HelpFormatter):
+	"""
+		Allows --help to better fit the console and adds support for blank lines
+	"""
 	def __init__(self, prog, indent_increment=2, max_help_position=24, width=None):
 		argparse.HelpFormatter.__init__(self, prog, indent_increment, shutil.get_terminal_size().columns//2, width)
 	def _split_lines(self, text, width):
@@ -153,6 +149,7 @@ class CustomHelpFormatter(argparse.HelpFormatter):
 		return lines
 
 _extendedHelp={
+	# sub
 	"sub":"""--sub advanced usage:
 	The easiest way to explain advanced uses of `--sub` is to give an example. So take `--sub a ? b ? c d e f + x ? y z * ? t ? e d * abc xyz` as an example.  
 	What it means is the following:
@@ -167,6 +164,7 @@ _extendedHelp={
 
 	Obviously 99% of use cases don't need conditionals at all so just doing `--sub abc def * uvw xyz` is sufficient""",
 
+	# blockwise
 	"blockwise":"""Blockwise sorting:
 	A generic sort function will think "file10.jpg" comes before "file2.jpg"
 	Windows, on the other hand, has code that treats the number part as a number
@@ -178,6 +176,7 @@ _extendedHelp={
 
 	The end result is that file2.jpg is correctly placed before file10.jpg""",
 
+	# order
 	"order":f"""`--order` usage:
 	`--order` determines the order of functions that process matches
 	- The default value for `--order` is {', '.join(DEFAULTORDER)}
@@ -185,6 +184,8 @@ _extendedHelp={
 	- The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain"""
 }
 for topic in _extendedHelp:
+	# Edits _extendedHelp to make generating the README easier
+	# Should probably be moved to the pre-commit hook script
 	if "JREP_MARKDOWN" in os.environ:
 		_extendedHelp[topic]="## (`"+topic+"`) "+_extendedHelp[topic].replace("\n", "  \n").replace(":  ", "").replace("\n\t", "\n")
 		_extendedHelp[topic]=re.sub(r"(?<=\n\t)([a-z])(?=\.)", lambda x:str("ABCDEFGHIJKLMNOPQRSTUVWXYZ".index(x[0].upper())+1), _extendedHelp[topic])
@@ -192,6 +193,9 @@ for topic in _extendedHelp:
 		_extendedHelp[topic]=_extendedHelp[topic].replace("`", "").replace("\t", "  ")
 
 class CustomHelpAction(argparse._HelpAction):
+	"""
+		Makes extended help (--help topic) work
+	"""
 	def __init__(self, *args, **kwargs):
 		super(argparse._HelpAction, self).__init__(*args, **kwargs)
 	def __call__(self, parser, namespace, value, option_string=None):
@@ -220,7 +224,6 @@ _stdin=parser.add_mutually_exclusive_group()
 _stdin.add_argument("--stdin-files"               , "-F", action="store_true"                   , help="Treat STDIN as a list of files")
 _stdin.add_argument("--stdin-globs"               , "-G", action="store_true"                   , help="Treat STDIN as a list of globs")
 _stdin.add_argument("--stdin-anti-match-strings"  ,       action="store_true"                   , help="Treat STDIN as a list of strings to not match")
-#_stdin.add_argument("--stdin-option"              ,                                               help="Append STDIN lines to the end of any option (drop the -- at the start)")
 
 parser.add_line()
 parser.add_line()
@@ -283,7 +286,7 @@ parser.add_argument("--limit"                     , "-l", nargs="+", default=JSO
 parser.add_argument("--depth-first"               ,       action="store_true"                      , help="Enter subdirectories before processing files")
 parser.add_argument("--glob-root-dir"             ,                                                  help="Root dir to run globs in (JANK)")
 
-parser.add_argument("--match-whole-lines"         ,       action="store_true"                      , help="Match whole lines like FINDSTR")
+parser.add_argument("--match-whole-lines"         , "-L", action="store_true"                      , help="Match whole lines like FINDSTR")
 parser.add_argument("--print-non-matching-files"  ,       action="store_true"                      , help="Print file names with no matches (Partially broken)")
 #parser.add_argument("--json"                      , "-j", action="store_true"                      , help="Print output as JSON")
 parser.add_argument("--no-warn"                   ,       action="store_true"                      , help="Don't print warning messages")
@@ -304,8 +307,6 @@ def verbose(x):
 		print(f"Verbose on line {caller[2]} in function {caller[3]}: {x}")
 def warn(x, error=None):
 	if not parsedArgs.no_warn:
-		#caller=inspect.stack()[1]
-		#print(f"Waring on line {caller[2]} in function {caller[3]}: {x}", file=sys.stderr)
 		if parsedArgs.hard_warn:
 			raise error or Exception(f"No error provided (Message: \"{x}\")")
 		else:
@@ -314,15 +315,6 @@ def warn(x, error=None):
 
 verbose("JREP preview version")
 verbose(parsedArgs)
-
-# if parsedArgs.stdin_option_name:
-# 	_optname=parsedArgs.stdin_option_name
-# 	if not isinstance(parsedArgs.__getattribute__(_optname), list):
-# 		warn("Error: Cannot appent STDIN lines to non=list option")
-# 		exit(2)
-# 	for x in parser._actions:
-# 		print(x, dir(x))
-# 	#object.__setattr__(parsedArgs, _optname, parsedArgs.__getattribute__(_optname)+_STDIN.decode().splitlines())
 
 if parsedArgs.enhanced_engine:
 	import regex as re
@@ -405,7 +397,6 @@ def dirnameChecker(dirname):
 		parsedArgs.dir_full_name_ignore_regex
 	)
 
-doneDir=False
 def _iterdir(dirname, dir_fd, dironly):
 	"""
 		A modified version of glob._iterdir for the sake of both customization and optimization
@@ -457,7 +448,9 @@ def _iterdir(dirname, dir_fd, dironly):
 glob._iterdir=_iterdir
 
 def _glob1(dirname, pattern, dir_fd, dironly):
-	global doneDir
+	"""
+		A modified version of glob._glob1 for the sake of both customization and optimization
+	"""
 	names = _iterdir(dirname, dir_fd, dironly)
 	if not glob._ishidden(pattern):
 		names = (x for x in names if not glob._ishidden(x))
@@ -465,13 +458,15 @@ def _glob1(dirname, pattern, dir_fd, dironly):
 		if fnmatch.fnmatch(name, pattern):
 			verbose(f"Yielding \"{name}\"")
 			yield name
-		if doneDir:
-			doneDir=False
+		if runData["doneDir"]:
+			runData["doneDir"]=False
 			break
 glob._glob1=_glob1
 
 def _rlistdir(dirname, dir_fd, dironly):
-	global doneDir
+	"""
+		A modified version of glob._rlistdir for the sake of both customization and optimization
+	"""
 	names = glob._listdir(dirname, dir_fd, dironly)
 	for x in names:
 		if not glob._ishidden(x):
@@ -479,8 +474,8 @@ def _rlistdir(dirname, dir_fd, dironly):
 			path = glob._join(dirname, x) if dirname else x
 			for y in _rlistdir(path, dir_fd, dironly):
 				yield glob._join(x, y)
-				if doneDir:
-					doneDir=False
+				if runData["doneDir"]:
+					runData["doneDir"]=False
 					break
 glob._rlistdir=_rlistdir
 
@@ -501,7 +496,8 @@ ofmt={
 
 def handleCount(rules, runData):
 	"""
-		A hopefully less jank function that handles --count stuff
+		Prints out --count data
+		Very janky but it works
 	"""
 	cats      ={"t":"total" , "d":"dir"    , "f":"file"                 }
 	subCats   ={"t":"dfm"   , "d":"fm"     , "f":"m"                    }
@@ -579,6 +575,9 @@ def _blockwiseSort(x, y):
 
 @functools.cmp_to_key
 def blockwiseSort(x, y):
+	"""
+		Prevents the blockwise sort from splitting 123abc/def456 into ["123", "abc/def", "456"]
+	"""
 	xlist=x.replace("\\", "/").split("/")
 	ylist=y.replace("\\", "/").split("/")
 	for xitem, yitem in zip(xlist, ylist):
@@ -590,7 +589,9 @@ def sortFiles(files, key=None):
 	"""
 		Sorts files if --sort is present
 		Note that sorting files requires loading all file names in a directory into memory
-		Also it's just generally slow
+		Also it's just generally slow for large file sets
+		Unless you're using really high end SSD, CPU, and RAM
+		And if you are then I'm sorry for writing JREP in Python
 	"""
 	if key==None:
 		return files
@@ -616,6 +617,10 @@ def sortFiles(files, key=None):
 	#return sorted(files, key=sorts[key])
 
 def fileContentsDontMatter():
+	"""
+		If file contents don't matter, tell getFiles to not even run open() on them
+		JREP doesn't load file contents into memory (it uses mmap) but just opening a file handler takes time
+	"""
 	return parsedArgs.dont_print_matches and\
 	       not any(parsedArgs.regex) and\
 	       not parsedArgs.file_regex and not parsedArgs.file_anti_regex and\
@@ -624,10 +629,10 @@ def fileContentsDontMatter():
 
 def getFiles():
 	"""
-		Yields files selected with --file and --glob as {"file":filename, "data":mmapFile/bytes}
+		Yields files selected with --file and --glob
 		Stdin has a filename of -
-		Empty files and stdin use a bytes object instead of mmap
-		If the contents of a file are irrelevant, b"" is always used instead of mmap
+		Empty files and stdin use a bytes object instead of mmap (because Windows)
+		If the contents of a file are irrelevant (see: fileContentsDontMatter), b"" is always used instead of mmap
 	"""
 	def advancedGlob(pattern, recursive=False):
 		"""
@@ -701,6 +706,10 @@ def getFiles():
 			yield {"name": file, "isDir": True, "stdin": False}
 
 def processFileName(fname):
+	"""
+		Process file names according to --name-sub, --print-full-paths, and --print-posix-paths
+		Used for printing file names as well as --no-name-duplicates
+	"""
 	fname=_funcSub(parsedArgs.name_sub, fname.encode(), 0, wrap=False)
 	if parsedArgs.print_full_paths : fname=os.path.realpath(fname)
 	if parsedArgs.print_posix_paths: fname=fname.replace(b"\\", b"/")
@@ -708,6 +717,10 @@ def processFileName(fname):
 	return fname
 
 def processDirName(dname):
+	"""
+		processFileName but applied to directory names
+		--dir-name-sub is used instead of --name-sub
+	"""
 	dname=_funcSub(parsedArgs.dir_name_sub, dname.encode(), 0)
 	dname=dname or b"."
 	if parsedArgs.print_full_paths : dname=os.path.realpath(dname)
@@ -716,8 +729,10 @@ def processDirName(dname):
 	return dname
 
 def escape(match):
-	"""
+	r"""
 		Handle --escape
+		Converts backslashes, carriage returns, and newlines to \\, \r, and \n respectively
+		Also converts non-printable bytes to \xXX to avoid stuff like ANSI codes and bells
 	"""
 	if parsedArgs.escape:
 		ret=match.replace(b"\\", b"\\\\").replace(b"\r", b"\\r").replace(b"\n", b"\\n")
@@ -728,15 +743,17 @@ def escape(match):
 def printMatch(match, regexIndex):
 	"""
 		Print matches
+		Not much else to say
 	"""
-	if match==None:
+	if match is None:
 		return
 	sys.stdout.buffer.write(ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
 	sys.stdout.buffer.write(escape(match[0]))
 	sys.stdout.buffer.write(b"\n")
 	sys.stdout.buffer.flush()
 
-# Tracking stuffs
+# Keeping everything like this makes life easier
+# It's a mess but the alternative is worse
 runData={
 	"file": {
 		"printedName":False,
@@ -793,12 +810,14 @@ runData={
 	"filenames":[],
 	"currDir":None,
 	"lastDir":None,
+	"doneDir":False,
 }
 
 def checkLimits(sn):
 	"""
-		Given an LCName's "short name" (total-files -> tf),\
+		Given an LCName's "short name" (total-files -> tf),
 		check whether or not it's exceeded its value in --limit (if set)
+		Like handleCount, this function is quite jank, but it works
 	"""
 	def getValue(sn):
 		nameMap={"t":"total","d":"dir","f":"file","m":"match"}
@@ -827,6 +846,7 @@ runData["total"]["dirsPerRegex"         ]=[0 for x in parsedArgs.regex]
 def delayedSub(repl, match):
 	"""
 		Use the secret sre_parse module to emulate re.sub with a re.Match object
+		Used exclusively for --replace
 	"""
 	parsedTemplate=sre_parse.parse_template(repl, match.re)
 	for x in parsedTemplate[0]:
@@ -839,6 +859,7 @@ def delayedSub(repl, match):
 def funcReplace(parsedArgs, match, **kwargs):
 	"""
 		Handle --replace
+		Uses the secret sre_parse module to commit anti-Pythonic blasphemy
 	"""
 	if parsedArgs.replace:
 		replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
@@ -851,7 +872,6 @@ def _funcSub(subRules, match, regexIndex, wrap=True, **kwargs):
 		TYSM mCoding for explaining how zip works
 		(zip(*arr) is a bit like transposing arr (arr[y][x] becomes arr[x][y]))
 	"""
-
 	if subRules:
 		if wrap:
 			regexIndex=regexIndex%len(subRules)
@@ -870,11 +890,13 @@ def funcSub(parsedArgs, match, regexIndex, **kwargs):
 	return JSObj({
 		**match,
 		0:_funcSub(parsedArgs.sub, match[0], regexIndex, **kwargs)
+		# Probably should be preserving groups too
 	})
 
 def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 	"""
 		Handle --match-whole-lines
+		Very jank; Needs to be improved
 	"""
 	if parsedArgs.match_whole_lines:
 		lineStart=file["data"].rfind(b"\n", 0, match.span()[1])
@@ -890,12 +912,15 @@ def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 class NextFile(Exception):
 	"""
 		Raised by funcMatchRegex and funcNoDuplicates when a match failes the match regex stuff
+		Future Scripter17 here: Huh???
 	"""
 	pass
 
 def funcMatchRegex(parsedArgs, match, regexIndex, **kwargs):
 	"""
 		Handle --match-regex and --match-anti-regex
+		Because yes. Filtering matches by using another regex is a feature I genuinely needed
+		Most features in JREP I have actually needed sometimes
 	"""
 	stdinThing=False
 	if parsedArgs.stdin_anti_match_strings and _STDIN:
@@ -928,7 +953,7 @@ def funcPrintDir(parsedArgs, runData, currDir, **kwargs):
 
 def funcPrintName(parsedArgs, file, runData, **kwargs):
 	"""
-		Print file name
+		Handle --print-names
 	"""
 	if parsedArgs.print_file_names and not runData["file"]["printedName"]:
 		sys.stdout.buffer.write(b"File: "*_header+processFileName(file["name"]))
@@ -938,7 +963,7 @@ def funcPrintName(parsedArgs, file, runData, **kwargs):
 
 def funcPrintMatches(parsedArgs, file, regexIndex, match, **kwargs):
 	"""
-		Handle file name printing
+		Print matches
 	"""
 	if not parsedArgs.dont_print_matches:
 		if parsedArgs.weave_matches:
@@ -1075,11 +1100,11 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 		elif dirRegexResult is False:
 			verbose(f"Contents of directory \"{runData['currDir']}\" (\"{os.path.realpath(runData['currDir'])}\") matched a fail regex; Continuing...")
 			runData["total"]["failedDirs"]+=1
-			doneDir=True
+			runData["doneDir"]=True
 			runData["file"]["passed"]=False
 		elif dirRegexResult is None:
 			verbose(f"Contents of directory \"{runData['currDir']}\" (\"{os.path.realpath(runData['currDir'])}\") matched an ignore regex; Continuing...")
-			doneDir=True
+			runData["doneDir"]=True
 			runData["file"]["passed"]=False
 
 	# Main matching stuff
@@ -1164,6 +1189,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 						except NextFile:
 							break
 					else:
+						# Turns out for...else lets you run code when the loop isn't `break`ed out of
 						runData["total"]["passedMatches"        ]            +=1
 						runData["dir"  ]["passedMatches"        ]            +=1
 						runData["file" ]["passedMatches"        ]            +=1
@@ -1206,7 +1232,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	if checkLimits("dft") or checkLimits("dfp") or checkLimits("dff") or\
 	   checkLimits("dmt") or checkLimits("dmp") or checkLimits("dmf"):
 		verbose("Dir limit(s) reached")
-		doneDir=True
+		runData["doneDir"]=True
 
 # --count dir-*
 if runData["currDir"] is not None and runData["total"]["totalDirs"]:

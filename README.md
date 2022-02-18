@@ -199,7 +199,7 @@ options:
   --depth-first                         Enter subdirectories before processing
                                         files
   --glob-root-dir GLOB_ROOT_DIR         Root dir to run globs in (JANK)
-  --match-whole-lines                   Match whole lines like FINDSTR
+  --match-whole-lines, -L               Match whole lines like FINDSTR
   --print-non-matching-files            Print file names with no matches
                                         (Partially broken)
   --no-warn                             Don't print warning messages
