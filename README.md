@@ -37,12 +37,12 @@ usage: jrep.py [--help [HELP]] [--string] [--enhanced-engine]
                [--match-anti-regex Regex [Regex ...]]
                [--match-ignore-regex Regex [Regex ...]] [--no-duplicates]
                [--no-name-duplicates] [--sort SORT]
-               [--sort-regex Regex [Regex ...]] [--no-headers]
-               [--print-directories] [--print-file-names] [--print-full-paths]
-               [--print-posix-paths] [--dont-print-matches]
-               [--print-match-offset] [--print-match-range]
-               [--replace Regex [Regex ...]] [--sub Regex [Regex ...]]
-               [--name-sub Regex [Regex ...]]
+               [--sort-regex Regex [Regex ...]] [--sort-dir SORT_DIR]
+               [--no-headers] [--print-directories] [--print-file-names]
+               [--print-full-paths] [--print-posix-paths]
+               [--dont-print-matches] [--print-match-offset]
+               [--print-match-range] [--replace Regex [Regex ...]]
+               [--sub Regex [Regex ...]] [--name-sub Regex [Regex ...]]
                [--dir-name-sub Regex [Regex ...]] [--escape]
                [--count COUNT [COUNT ...]] [--limit LIMIT [LIMIT ...]]
                [--depth-first] [--glob-root-dir GLOB_ROOT_DIR]
@@ -162,6 +162,7 @@ options:
   --sort-regex Regex [Regex ...]        Regexes to apply to file names keys
                                         (like --replace) for purposes of
                                         sorting (EXPERIMENTAL)
+  --sort-dir SORT_DIR                   --sort on a per-directory basis
   --no-headers, -H                      Don't print match: or file: before
                                         lines
   --print-directories, -d               Print names of explored directories

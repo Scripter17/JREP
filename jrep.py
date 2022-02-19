@@ -16,6 +16,7 @@ import mmap, itertools, functools, sre_parse, inspect
 """
 
 if not hasattr(functools, "cache"):
+	# Python 3.8 compatibility
 	functools.cache=functools.lru_cache(maxsize=None)
 
 DEFAULTORDER=[
@@ -291,6 +292,7 @@ parser.add_argument("--no-name-duplicates"        ,       action="store_true"   
 
 parser.add_argument("--sort"                      , "-S",                                         help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available. Run jrep --help blockwise for more info")
 parser.add_argument("--sort-regex"                ,       nargs="+", default=[], metavar="Regex", help="Regexes to apply to file names keys (like --replace) for purposes of sorting (EXPERIMENTAL)")
+parser.add_argument("--sort-dir"                  ,                                               help="--sort on a per-directory basis")
 parser.add_argument("--no-headers"                , "-H", action="store_true"                   , help="Don't print match: or file: before lines")
 parser.add_argument("--print-directories"         , "-d", action="store_true"                   , help="Print names of explored directories")
 parser.add_argument("--print-file-names"          , "-n", action="store_true"                   , help="Print file names as well as matches")
@@ -468,6 +470,7 @@ def _iterdir(dirname, dir_fd, dironly):
 					except OSError:
 						pass
 				# Yirld files and folders in the right order
+				files=sortDirFiles(files, dirname, key=parsedArgs.sort_dir)
 				if parsedArgs.depth_first:
 					yield from directories
 					yield from files
@@ -644,11 +647,19 @@ def sortFiles(files, key=None):
 
 	if key in ["name", "blockwise", "rname", "rblockwise"] and parsedArgs.sort_regex:
 		for pattern, replace in zip(parsedArgs.sort_regex[0::2], parsedArgs.sort_regex[1::2]):
-			files=map(lambda x: {"orig":x, "name":re.sub(pattern, replace, x["name"])}, files)
+			files=map(lambda file: {"orig":file, "name":re.sub(pattern, replace, file["name"])}, files)
 
 	return map(lambda x:x["orig"] if "orig" in x else x, sorted(files, key=sorts[key]))
 
 	#return sorted(files, key=sorts[key])
+
+def sortDirFiles(names, dirname, key=None):
+	"""
+		Handler for --sort-dir
+	"""
+	files=map(lambda name:{"name":os.path.join(dirname, name), "stdin":False}, names)
+	for file in sortFiles(files, key=key):
+		yield os.path.relpath(file["name"], dirname)
 
 def fileContentsDontMatter():
 	"""
