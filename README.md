@@ -4,14 +4,18 @@ JREP is a general-purpose command line utility that takes the basic concept of G
 
 Basically I couldn't find a good GREP for windows and GREP itself kinda sucks so I did it myself. Excpect dumb bodges and messy code despite my efforts to keep both to a minimum.
 
+Check [here](#compatibility) for compatibility info
+
 The current output of `jrep --help`:  
-For details, [check below](#details)
+For details, [check below](#extended-help-messages)
 
 <!--<HELP MSG>-->
 ```
-usage: jrep.py [--help [HELP]] [--string] [--enhanced-engine]
+usage: jrep.py [--help [topic]] [--string] [--enhanced-engine]
                [--file FILE [FILE ...]] [--glob GLOB [GLOB ...]]
+               [--include-dirs]
                [--stdin-files | --stdin-globs | --stdin-anti-match-strings]
+               [--no-duplicates] [--no-name-duplicates]
                [--name-regex Regex [Regex ...]]
                [--name-anti-regex Regex [Regex ...]]
                [--name-ignore-regex Regex [Regex ...]]
@@ -35,8 +39,7 @@ usage: jrep.py [--help [HELP]] [--string] [--enhanced-engine]
                [--file-ignore-regex Regex [Regex ...]]
                [--match-regex Regex [Regex ...]]
                [--match-anti-regex Regex [Regex ...]]
-               [--match-ignore-regex Regex [Regex ...]] [--no-duplicates]
-               [--no-name-duplicates] [--sort SORT]
+               [--match-ignore-regex Regex [Regex ...]] [--sort SORT]
                [--sort-regex Regex [Regex ...]] [--sort-dir SORT_DIR]
                [--no-headers] [--print-directories] [--print-file-names]
                [--print-full-paths] [--print-posix-paths]
@@ -46,33 +49,50 @@ usage: jrep.py [--help [HELP]] [--string] [--enhanced-engine]
                [--dir-name-sub Regex [Regex ...]] [--escape]
                [--count COUNT [COUNT ...]] [--limit LIMIT [LIMIT ...]]
                [--depth-first] [--glob-root-dir GLOB_ROOT_DIR]
-               [--match-whole-lines] [--print-non-matching-files] [--no-warn]
+               [--match-whole-lines] [--print-failed-files] [--no-warn]
                [--hard-warn] [--weave-matches] [--strict-weave]
-               [--pre-match-exec cmd] [--match-exec cmd] [--pre-file-exec cmd]
-               [--file-exec cmd] [--pre-dir-exec cmd] [--dir-exec cmd]
-               [--order ORDER [ORDER ...]] [--verbose] [--print-rundata]
+               [--pre-match-exec cmd] [--match-exec cmd]
+               [--if-match-exec-before cmd] [--if-match-exec-after cmd]
+               [--if-no-match-exec-after cmd] [--pre-file-exec cmd]
+               [--file-exec cmd] [--if-file-exec-before cmd]
+               [--if-file-exec-after cmd] [--if-no-file-exec-after cmd]
+               [--pre-dir-exec cmd] [--dir-exec cmd]
+               [--if-dir-exec-before cmd] [--if-dir-exec-after cmd]
+               [--if-no-dir-exec-after cmd] [--order ORDER [ORDER ...]]
+               [--no-flush] [--print-rundata] [--verbose]
                [Regex ...]
 
-positional arguments:
+options:
+  --help [topic], -h [topic]            show this help message and exit OR use
+                                        `--help [topic]` for help with [topic]
+
+Files and regexes:
   Regex                                 Regex(es) to process matches for
                                         (reffered to as "get regexes")
-
-options:
-  --help [HELP], -h [HELP]              show this help message and exit OR use
-                                        `--help [topic]` for help with [topic]
+                                        
   --string, -s                          Treat get regexes as strings. Doesn't
                                         apply to any other options.
   --enhanced-engine, -E                 Use alternate regex engine from
                                         https://pypi.org/project/regex/
+                                        
   --file FILE [FILE ...], -f FILE [FILE ...]
                                         A list of files to check
   --glob GLOB [GLOB ...], -g GLOB [GLOB ...]
                                         A list of globs to check
+  --include-dirs                        Process directories as files
+                                        
   --stdin-files, -F                     Treat STDIN as a list of files
   --stdin-globs, -G                     Treat STDIN as a list of globs
   --stdin-anti-match-strings            Treat STDIN as a list of strings to
                                         not match
-                                        
+
+Filters:
+  --no-duplicates, -D                   Don't print duplicate matches (See
+                                        also: --order)
+  --no-name-duplicates                  Don't process files whose names have
+                                        already been processed (takes --name-
+                                        sub, --print-full-paths and --print-
+                                        posix-paths)
                                         
   --name-regex Regex [Regex ...], -t Regex [Regex ...]
                                         If a file name matches all supplied
@@ -94,6 +114,7 @@ options:
                                         Like --full-name-anti-regex but
                                         doesn't contribute to --count
                                         *-failed-files
+                                        
   --name-glob Glob [Glob ...]           If a file name matches all supplied
                                         globs, keep going. Otherwise continue
   --name-anti-glob Glob [Glob ...]      Like --name-glob but excludes file
@@ -109,6 +130,7 @@ options:
   --full-name-ignore-glob Glob [Glob ...]
                                         Like --full-name-anti-glob but doesn't
                                         contribute to --count *-failed-files
+                                        
   --dir-name-regex Regex [Regex ...]    If a directory name matches all
                                         supplied regexes, enter it. Otherwise
                                         continue
@@ -131,12 +153,14 @@ options:
                                         Like --dir-full-name-anti-regex but
                                         doesn't contribute to --count total-
                                         failed-dirs
+                                        
   --file-regex Regex [Regex ...]        Regexes to test file contents for
   --file-anti-regex Regex [Regex ...]   Like --file-regex but excludes files
                                         that match of the supplied regexes
   --file-ignore-regex Regex [Regex ...]
                                         Like --file-anti-regex but doesn't
                                         contribute to --count *-failed-files
+                                        
   --match-regex Regex [Regex ...]       Groups are split along lone *. Matches
                                         from the Nth get regex are tested with
                                         the Nth group
@@ -146,14 +170,8 @@ options:
   --match-ignore-regex Regex [Regex ...]
                                         Like --match-anti-regex but doesn't
                                         contribute to --count *-failed-matches
-                                        
-                                        
-  --no-duplicates, -D                   Don't print duplicate matches (See
-                                        also: --order)
-  --no-name-duplicates                  Don't process files whose names have
-                                        already been processed (takes --name-
-                                        sub, --print-full-paths and --print-
-                                        posix-paths)
+
+Sorting:
   --sort SORT, -S SORT                  Sort files by ctime, mtime, atime,
                                         name, or size. Prefix key with "r" to
                                         reverse. A windows-esque "blockwise"
@@ -163,8 +181,11 @@ options:
                                         (like --replace) for purposes of
                                         sorting (EXPERIMENTAL)
   --sort-dir SORT_DIR                   --sort on a per-directory basis
+
+Output:
   --no-headers, -H                      Don't print match: or file: before
                                         lines
+                                        
   --print-directories, -d               Print names of explored directories
   --print-file-names, -n                Print file names as well as matches
   --print-full-paths, -p                Print full file paths
@@ -178,6 +199,8 @@ options:
   --print-match-range, -O               Print where the match starts and ends
                                         in the file as a hexadecimal number
                                         (implies -o)
+
+Replace/Sub:
   --replace Regex [Regex ...], -r Regex [Regex ...]
                                         Regex replacement
   --sub Regex [Regex ...], -R Regex [Regex ...]
@@ -191,6 +214,8 @@ options:
   --escape, -e                          Escape back slashes, newlines,
                                         carriage returns, and non-printable
                                         characters
+
+Misc.:
   --count COUNT [COUNT ...], -c COUNT [COUNT ...]
                                         Count match/file/dir per file, dir,
                                         and/or total (Ex: --count fm dir-
@@ -199,11 +224,13 @@ options:
                                         Limit match/file/dir per file, dir,
                                         and/or total (Ex: --limit filematch=1
                                         total_dirs=5)
+                                        
   --depth-first                         Enter subdirectories before processing
                                         files
   --glob-root-dir GLOB_ROOT_DIR         Root dir to run globs in (JANK)
+                                        
   --match-whole-lines, -L               Match whole lines like FINDSTR
-  --print-non-matching-files            Print file names with no matches
+  --print-failed-files                  Print file names even if they fail
                                         (Partially broken)
   --no-warn                             Don't print warning messages
   --hard-warn                           Throw errors instead of warnings
@@ -211,24 +238,51 @@ options:
                                         results for each get regex, then
                                         second results, etc.)
   --strict-weave, -W                    Only print full weave sets
+
+Exec:
   --pre-match-exec cmd                  Command to run before printing each
                                         match
   --match-exec cmd                      Command to run after printing each
                                         match
+  --if-match-exec-before cmd            Command to run as soon as least one
+                                        match passes
+  --if-match-exec-after cmd             Command to run at the end if at least
+                                        one match passed
+  --if-no-match-exec-after cmd          Command to run at the end if at no
+                                        matches passed
+                                        
   --pre-file-exec cmd                   Command to run before printing each
                                         file name
   --file-exec cmd                       Command to run after printing each
                                         file name
+  --if-file-exec-before cmd             Command to run as soon as least one
+                                        file passes
+  --if-file-exec-after cmd              Command to run at the end if at least
+                                        one file passed
+  --if-no-file-exec-after cmd           Command to run at the end if at no
+                                        files passed
+                                        
   --pre-dir-exec cmd                    Command to run before printing each
                                         dir name
   --dir-exec cmd                        Command to run after printing each dir
                                         name
+  --if-dir-exec-before cmd              Command to run as soon as least one
+                                        dir passes
+  --if-dir-exec-after cmd               Command to run at the end if at least
+                                        one dir passed
+  --if-no-dir-exec-after cmd            Command to run at the end if at no
+                                        dirs passed
+
+Debugging/Advanced:
   --order ORDER [ORDER ...]             The order in which modifications to
                                         matches are applied. Run jrep --help
                                         order for more info
-  --verbose, -v                         Verbose info
-  --print-rundata, --print-run-data     Print raw runData JSON at the end
+  --no-flush                            Improves speed by disabling manually
+                                        flushing the stdout buffer (ideal for
+                                        chaining commands)
+  --print-rundata                       Print raw runData JSON at the end
                                         (used for debugging)
+  --verbose, -v                         Verbose info
 The following have extended help that can be seen with --help [topic]: sub, blockwise, order, exec
 ```
 <!--</HELP MSG>-->
@@ -278,3 +332,21 @@ Usage looks like `--exec "echo {}"` or just `--exec "echo"`
 `--dir-exec`: after  printing directory names  
 `--pre-dir-exec`: before printing directory names
 <!--</EXTHELP MSGS>-->
+
+# Compatibility
+
+&nbsp;|Python 3.6|3.7|3.8|3.9|3.10
+|:-:|:-:|:-:|:-:|:-:|:-:|
+Windows 10  |? |? |? |? |Y 
+Ubuntu 20.04|? |? |Y?|? |? 
+
+- I primarily develop JREP on a Windows 10 machine running Python 3.10
+- Due to how I override some internal stuff I'll need to test each version of python individually
+- I don't have a Mac machine or the $1000 required to get one. It *probably* works but don't count on it
+
+The end goal is for JREP to 100% work on
+- Windows 7 through 11
+- The second latest LTS releases of every major Linux distro
+- The past decade of Mac machines
+
+I don't think there's much (if any) platform-specific jank in JREP but it'll take a while to confirm that
