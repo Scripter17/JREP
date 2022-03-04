@@ -6,9 +6,9 @@ import re, glob, fnmatch, copy, json
 import mmap, itertools, functools, sre_parse, inspect
 _re=re
 try:
-	import regex
+	import regex as _regex
 except ModuleNotFoundError:
-	regex=None
+	_regex=None
 
 """
 	JREP - "Just Release mE Please (I've been in pre-alpha for 6 months)"
@@ -20,9 +20,27 @@ except ModuleNotFoundError:
 	(Can be treated as public domain if your project requires that)
 """
 
+# Compatibility for old Python versions
 if not hasattr(functools, "cache"):
-	# Python 3.8 compatibility
 	functools.cache=functools.lru_cache(maxsize=None)
+
+if not hasattr(glob, "_listdir"):
+	def _listdir(dirname, dir_fd, dironly):
+		"""
+			For Python 3.6 compatibility
+		"""
+		with contextlib.closing(_iterdir(dirname, dir_fd, dironly)) as it:
+			return list(it)
+	import contextlib
+	glob._listdir=_listdir
+
+if not hasattr(glob, "_join"):
+	def _join(dirname, basename):
+		# It is common if dirname or basename is empty
+		if not dirname or not basename:
+			return dirname or basename
+		return os.path.join(dirname, basename)
+	glob._join=_join
 
 DEFAULTORDER=[
 	"replace",
@@ -455,16 +473,19 @@ def dirnameChecker(dirname):
 
 def _iterdir(dirname, dir_fd, dironly=False):
 	"""
-		A modified version of glob._iterdir for the sake of both customization and optimization
+		A modified version of glob._iterdir for both customization and optimization
 	"""
 	files=[]
 	directories=[]
 	try:
 		fd = None
 		fsencode = None
-		if dir_fd:
+		if isinstance(dir_fd, bool):
+			dir_fd=None
+
+		if dir_fd is not None:
 			if dirname:
-				fd = arg = os.open(dirname, _dir_open_flags, dir_fd=dir_fd)
+				fd = arg = os.open(dirname, glob._dir_open_flags, dir_fd=dir_fd)
 			else:
 				arg = dir_fd
 			if isinstance(dirname, bytes):
@@ -536,6 +557,7 @@ def _rlistdir(dirname, dir_fd, dironly=False):
 					break
 glob._rlistdir=_rlistdir
 
+
 def handleCount(rules, runData):
 	"""
 		Prints out --count data
@@ -548,7 +570,7 @@ def handleCount(rules, runData):
 	filters   ={"p":"passed", "h":"handled", "f":"failed"               }
 
 	def handleTotals(regexIndex, value):
-		print(f"{keyCat.title()} {keySubCatPlural} (R{regexIndex}): "*_header+f"{value}")
+		print(ofmt["countTotal"].format(cat=keyCat.title(), subCat=keySubCatPlural, regexIndex=regexIndex, value=value))
 
 	def handleFiltereds(regexIndex, key):
 		if regexIndex=="*":
@@ -558,10 +580,10 @@ def handleCount(rules, runData):
 			filterCount=runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"][regexIndex]
 			divisor=runData[keyCat]['total'+keySubCat+"PerRegex"][regexIndex]
 
-		if len(key)==3 or key[3] in "ctr":
-			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}): "*_header+f"{filterCount}")
-		elif key[3] in "p":
-			print(f"{keySubCatFilter.title()} {keyCat} {keySubCatPlural} (R{regexIndex}): "*_header+f"{filterCount/divisor}")
+		if len(key)>3 and key[3]=="p":
+			filterCount/=divisor
+
+		print(ofmt["countFiltered"].format(filter=keySubCatFilter.title(), cat=keyCat, subCat=keySubCatFilter, regexIndex=regexIndex, count=filterCount))
 
 	for rule in rules:
 		for key in parsedArgs.count:
@@ -891,7 +913,8 @@ class NextMatch(Exception):
 		Raised by funcMatchRegex and funcNoDuplicates when a match failes the match regex stuff
 	"""
 	pass
-class NextMatch(Exception):
+
+class NextFile(Exception):
 	"""
 		Raised by funcNoNameDuplicates when a file name failes the name regex stuff
 	"""
@@ -1176,16 +1199,19 @@ def main(args):
 	_mAt=_header and _mOffs1
 	_mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
 	ofmt={
-		"dname": b"Directory: "          *_header,
-		"fname": b"File: "               *_header,
-		"match": ("Match (R{regexIndex})"*_header)+_mRange,
+		"dname"        : b"Directory: "                              *_header,
+		"fname"        : b"File: "                                   *_header,
+		"match"        : ("Match (R{regexIndex})"                    *_header)+_mRange,
+		"rundata"      : ("runData: "                                *_header)+"{runData}",
+		"countFiltered": ("{filter} {cat} {subCat} (R{regexIndex}): "*_header)+"{count}",
+		"countTotal"   : ("{cat} {subCat} (R{regexIndex}): "         *_header)+"{value}",
 	}
 
 	# Handle --enhanced-engine
 	if parsedArgs.enhanced_engine:
-		if regex is None:
+		if _regex is None:
 			raise ModuleNotFoundError("--enhanced-engine/-E is unavailable because third party module 'regex' isn't installed")
-		re=regex
+		re=_regex
 	else:
 		re=_re
 
@@ -1211,7 +1237,7 @@ def main(args):
 
 		if parsedArgs.print_rundata:
 			# Mainly for debugging. May expand upon later
-			print("runData: "*_header+json.dumps(runData))
+			print(ofmt["runData"].format(runData=json.dumps(runData)))
 
 		if file["isDir"] and not parsedArgs.include_dirs:
 			verbose(f"\"{file['name']}\" is a directory; Continuing")
@@ -1455,7 +1481,7 @@ def main(args):
 	execHandler(parsedArgs.if_dir_exec_after   if runData["total"]["passedDirs"   ] else parsedArgs.if_no_dir_exec_after  )
 
 	if parsedArgs.print_rundata:
-		print("runData: "*_header+json.dumps(runData))
+		print(ofmt["runData"].format(runData=json.dumps(runData)))
 
 if __name__=="__main__":
 	main(parser.parse_args())
