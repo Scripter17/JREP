@@ -856,7 +856,7 @@ def delayedSub(repl, match):
 
 # Match processors
 
-def funcReplace(parsedArgs, match, **kwargs):
+def funcReplace(parsedArgs, match, regexIndex, **kwargs):
 	"""
 		Handle --replace
 		Uses the secret sre_parse module to commit anti-Pythonic blasphemy
