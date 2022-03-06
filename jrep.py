@@ -557,7 +557,6 @@ def _rlistdir(dirname, dir_fd, dironly=False):
 					break
 glob._rlistdir=_rlistdir
 
-
 def handleCount(rules, runData):
 	"""
 		Prints out --count data
@@ -959,10 +958,9 @@ def execHandler(cmd, arg=None):
 		if isinstance(arg, bytes): arg=arg.decode()
 	if arg is not None:
 		if not isinstance(arg, list):
-			if "{}" not in cmd:
-				cmd+=" {}"
 			arg=[arg]
 		cmd=cmd.format(*arg)
+
 	sp.run(cmd, shell=True)
 
 def funcPrintDir(parsedArgs, runData, currDir, **kwargs):
@@ -1265,9 +1263,9 @@ def main(args):
 					verbose("Just exited a directory")
 					handleCount(rules=["dir"], runData=runData)
 				# Handle --limit total-dir
-				if checkLimits("tdp") or checkLimits("tdf") or checkLimits("tdt"):
-					verbose("Total directory limit reached; Exiting...")
-					break
+			if checkLimits("tdp") or checkLimits("tdf") or checkLimits("tdt"):
+				verbose("Total directory limit reached; Exiting...")
+				break
 			runData["total"]["totalDirs"]+=1
 
 			# Initialize runData["dir"]
