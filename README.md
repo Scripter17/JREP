@@ -41,7 +41,7 @@ usage: jrep.py [--help [topic]] [--string] [--enhanced-engine]
                [--match-anti-regex Regex [Regex ...]]
                [--match-ignore-regex Regex [Regex ...]] [--sort SORT]
                [--sort-regex Regex [Regex ...]] [--sort-dir SORT_DIR]
-               [--no-headers] [--print-directories] [--print-file-names]
+               [--no-headers] [--print-directories] [--print-names]
                [--print-full-paths] [--print-posix-paths]
                [--dont-print-matches] [--print-match-offset]
                [--print-match-range] [--replace Regex [Regex ...]]
@@ -187,7 +187,7 @@ Output:
                                         lines
                                         
   --print-directories, -d               Print names of explored directories
-  --print-file-names, -n                Print file names as well as matches
+  --print-names, -n                     Print file names as well as matches
   --print-full-paths, -p                Print full file paths
   --print-posix-paths, -P               Replace \ with / when printing file
                                         paths
@@ -319,7 +319,7 @@ The end result is that file2.jpg is correctly placed before file10.jpg
 
 ## (`order`) `--order` usage
 `--order` determines the order of functions that process matches  
-- The default value for `--order` is replace, match-whole-lines, sub, match-regex, no-name-duplicates, no-duplicates, print-dir, print-name, print-match  
+- The default value for `--order` is replace, match-whole-lines, sub, check-no-duplicates, match-regex, no-name-duplicates, no-duplicates, print-dir, print-name, print-match  
 - Changing the order of `sub`, `replace`, and `match-whole-lines` will mostly "work" but the output will make next to no sense  
 - The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain
 
