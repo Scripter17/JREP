@@ -1,4 +1,4 @@
-import glob as _glob
+import glob as _glob, common
 
 import contextlib
 import os
@@ -171,7 +171,7 @@ def _iterdir(dirname, dir_fd, dironly=False, runData=None):
 					except OSError:
 						pass
 				# Yield files and folders in the right order
-				files=sortDirFiles(files, dirname, key=runData["sortDir"])
+				files=common.sortDirFiles(files, dirname, key=runData["sortDir"])
 				if runData["depthFirst"]:
 					yield from directories
 					yield from files
