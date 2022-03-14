@@ -413,7 +413,7 @@ def globCheckerThing(partial, partialPass, partialFail, full="", fullPass=[], fu
 		return True
 	return False
 
-def filenameChecker(file):
+def filenameChecker(file, parsedArgs):
 	"""
 		Shorthand for handling filenames with regexCheckerThing
 	"""
@@ -441,7 +441,7 @@ def filenameChecker(file):
 	if None  in [r,g]: return None
 	return True
 
-def dirnameChecker(dirname):
+def dirnameChecker(dirname, parsedArgs):
 	return regexCheckerThing(
 		dirname,
 		parsedArgs.dir_name_regex,
@@ -508,7 +508,7 @@ def handleCount(rules, runData):
 				for regexIndex, value in enumerate(runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"]):
 					handleFiltereds(regexIndex, key)
 
-def fileContentsDontMatter():
+def fileContentsDontMatter(parsedArgs):
 	"""
 		If file contents don't matter, tell getFiles to not even run open() on them
 		JREP doesn't load file contents into memory (it uses mmap) but just opening a file handler takes time
@@ -578,7 +578,7 @@ def getFiles(parsedArgs, runData, STDIN=None):
 		absDir=os.path.normpath(os.path.join(os.getcwd(), relDir))
 		ret={"name": file, "basename":basename, "relDir":relDir, "absDir":absDir, "data": b"", "isDir": False, "stdin": False}
 		if os.path.isfile(file):
-			if fileContentsDontMatter() or not filenameChecker(ret):
+			if fileContentsDontMatter(parsedArgs) or not filenameChecker(ret, parsedArgs):
 				# Does the file content matter? No? Ignore it then
 				verbose("Optimizing away actually opening the file")
 				yield ret
@@ -600,7 +600,7 @@ def getFiles(parsedArgs, runData, STDIN=None):
 			ret["isDir"]=True
 			yield ret
 
-def processFileName(fname):
+def processFileName(fname, parsedArgs):
 	"""
 		Process file names according to --name-sub, --print-full-paths, and --print-posix-paths
 		Used for printing file names as well as --no-name-duplicates
@@ -611,7 +611,7 @@ def processFileName(fname):
 	fname=_funcSub(parsedArgs.name_sub, fname, 1, wrap=False)
 	return fname
 
-def processDirName(dname):
+def processDirName(dname, parsedArgs):
 	"""
 		processFileName but applied to directory names
 		--dir-name-sub is used instead of --name-sub
@@ -670,7 +670,7 @@ def checkLimit(sn, runData, filters="ptf"):
 		check whether or not it's exceeded its value in --limit (if set)
 		Like handleCount, this function is quite jank, but it works
 	"""
-	limit=parsedArgs.limit[sn]
+	limit=runData["limits"][sn]
 	if limit==0:
 		noLimit2.add(sn)
 		return None
@@ -814,7 +814,7 @@ def funcPrintDir(parsedArgs, runData, currDir, **kwargs):
 		execHandler(parsedArgs.if_dir_exec_before)
 		parsedArgs.if_dir_exec_before=None
 
-	pDirName=processDirName(currDir)
+	pDirName=processDirName(currDir, parsedArgs)
 	if parsedArgs.pre_dir_exec is not None:
 		# --pre-dir-exec
 		execHandler(parsedArgs.pre_dir_exec, pDirName)
@@ -842,7 +842,7 @@ def funcPrintName(parsedArgs, runData, file, **kwargs):
 		execHandler(parsedArgs.if_file_exec_before)
 		parsedArgs.if_file_exec_before=None
 
-	pFileName=processFileName(file["name"])
+	pFileName=processFileName(file["name"], parsedArgs)
 	if parsedArgs.pre_file_exec is not None:
 		# --pre-file-exec
 		execHandler(parsedArgs.pre_file_exec, pFileName)
@@ -913,9 +913,9 @@ def funcNoNameDuplicates(parsedArgs, runData, file, **kwargs):
 		Handle --no-name-duplicates
 	"""
 	if parsedArgs.no_name_duplicates:
-		if processFileName(file["name"]) in runData["filenames"]:
+		if processFileName(file["name"], parsedArgs) in runData["filenames"]:
 			raise NextFile()
-		runData["filenames"].append(processFileName(file["name"]))
+		runData["filenames"].append(processFileName(file["name"], parsedArgs))
 
 def funcPrintFailedFile(parsedArgs, runData, file, **kwargs):
 	"""
@@ -1051,6 +1051,7 @@ def main(args, STDIN=None):
 		"doneDir":False,
 		"depthFirst":parsedArgs.depth_first,
 		"sortDir":parsedArgs.sort_dir,
+		"limits":parsedArgs.limit,
 	}
 
 	def checkLimitCategory(sn, filters="ptf"):
@@ -1145,7 +1146,7 @@ def main(args, STDIN=None):
 		runData["dir"  ]["totalFiles"]+=1
 
 		# Handle --name-regex stuff
-		nameRegexResult=filenameChecker(file)
+		nameRegexResult=filenameChecker(file, parsedArgs)
 		if nameRegexResult is False:
 			verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched a fail regex; Continuing...")
 			runData["dir"  ]["failedFiles"]+=1
@@ -1176,7 +1177,7 @@ def main(args, STDIN=None):
 			if runData["currDir"]=="":
 				dirRegexResult=True
 			else:
-				dirRegexResult=dirnameChecker(runData["currDir"])
+				dirRegexResult=dirnameChecker(runData["currDir"], parsedArgs)
 
 			if dirRegexResult is True:
 				runData["total"]["passedDirs"]+=1
