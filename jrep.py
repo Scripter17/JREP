@@ -1,14 +1,9 @@
 #!/usr/bin/python3
 
 import argparse
-import os, sys, shutil, subprocess as sp
-import re, glob, fnmatch, copy, json
+import os, sys, subprocess as sp
+import re, glob, fnmatch, json
 import mmap, itertools, functools, sre_parse, inspect
-_re=re
-try:
-	import regex as _regex
-except ModuleNotFoundError:
-	_regex=None
 
 """
 	JREP - "Just Release mE Please (I've been in pre-alpha for 6 months)"
@@ -49,7 +44,7 @@ DEFAULTORDER=[
 	"match-regex",
 	"no-name-duplicates",
 	"no-duplicates",
-	"print-dir",
+	"print-dir-name",
 	"print-name",
 	"print-match",
 ]
@@ -88,22 +83,32 @@ class JSObj:
 	def keys(self): return self.obj.keys() # Makes **JSObj work
 
 # Helper function for generating the --limiy/--count parser regex
-_LCNameRegexPart=lambda *opts: "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
-_LCNameRegex=_LCNameRegexPart(r"files?"       , r"dir(?:ectori(?:es|y))?", r"total"                             )    +r"[-_]?"+\
-             _LCNameRegexPart(r"match(?:e?s)?", r"files?"                , r"dir(?:ectori(?:es|y))?"            )    +r"[-_]?"+\
-             _LCNameRegexPart(r"total"        , r"fail(?:u(?:re)?s?|d)"  , r"pass(?:e?[sd])?"       , "handled?")+"?"+r"[-_]?"+\
-             _LCNameRegexPart(r"counts?"      , r"percent(?:age)?s?"                                            )+"?"+r"[-_]?"+\
-             _LCNameRegexPart(r"regex"        , r"total"                                                        )+"?"
-_LCNameRegex=f"^{_LCNameRegex}$"
+# _LCNameRegexPart=lambda *opts: "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
+# _LCNameRegex=_LCNameRegexPart(r"files?"       , r"dir(?:ectori(?:es|y))?", r"total"                             )    +r"[-_]?"+\
+#              _LCNameRegexPart(r"match(?:e?s)?", r"files?"                , r"dir(?:ectori(?:es|y))?"            )    +r"[-_]?"+\
+#              _LCNameRegexPart(r"total"        , r"fail(?:u(?:re)?s?|d)"  , r"pass(?:e?[sd])?"       , "handled?")+"?"+r"[-_]?"+\
+#              _LCNameRegexPart(r"counts?"      , r"percent(?:age)?s?"                                            )+"?"+r"[-_]?"+\
+#              _LCNameRegexPart(r"regex"        , r"total"                                                        )+"?"
+# _LCNameRegex=f"^{_LCNameRegex}$"
+
+# def parseLCName(name):
+# 	"""
+# 		Normalize all ways --limit or --count targets can be written
+# 	"""
+# 	if len(name)==2:
+# 		name+="p"
+# 	match=re.match(_LCNameRegex, name, re.I)
+# 	if match:
+# 		return "".join(filter(lambda x:x, match.groups())).lower()
+# 	return name
 
 def parseLCName(name):
-	"""
-		Normalize all ways --limit or --count targets can be written
-	"""
-	match=re.match(_LCNameRegex, name, re.I)
-	if match:
-		return "".join(filter(lambda x:x, match.groups())).lower()
-	return name
+	name=name.replace("-", "_")
+	if len(name)==2:
+		name+="p"
+	if "_" not in name:
+		return name
+	return "".join(map(lambda x:x[0], name.split("_")))
 
 class LimitAction(argparse.Action):
 	"""
@@ -173,8 +178,7 @@ class FileRegexAction(argparse.Action):
 		Pre-processor for --file-regex stuff
 	"""
 	def __call__(self, parser, namespace, values, option_string):
-		values=[x.encode() for x in values]
-		setattr(namespace, self.dest, values)
+		setattr(namespace, self.dest, [x.encode() for x in values])
 
 class CustomArgumentParser(argparse.ArgumentParser):
 	"""
@@ -188,7 +192,7 @@ class CustomHelpFormatter(argparse.HelpFormatter):
 		Allows --help to better fit the console and adds support for blank lines
 	"""
 	def __init__(self, prog, indent_increment=2, max_help_position=24, width=None):
-		argparse.HelpFormatter.__init__(self, prog, indent_increment, shutil.get_terminal_size().columns//2, width)
+		argparse.HelpFormatter.__init__(self, prog, indent_increment, os.get_terminal_size().columns//2, width)
 	def _split_lines(self, text, width):
 		lines = super()._split_lines(text, width)
 		if "\n" in text:
@@ -273,7 +277,6 @@ parser=CustomArgumentParser(formatter_class=CustomHelpFormatter, add_help=False)
 parser.add_argument("--help", "-h", nargs="?", default=argparse.SUPPRESS, action=CustomHelpAction, metavar="topic", help="show this help message and exit OR use `--help [topic]` for help with [topic]")
 
 _group=parser.add_argument_group("Files and regexes")
-
 _group.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", help="Regex(es) to process matches for (reffered to as \"get regexes\")")
 parser.add_line()
 _group.add_argument("--string"                    , "-s", action="store_true"                   , help="Treat get regexes as strings. Doesn't apply to any other options.")
@@ -329,7 +332,7 @@ _group.add_argument("--sort-dir"                  ,                             
 _group=parser.add_argument_group("Output")
 _group.add_argument("--no-headers"                , "-H", action="store_true"                   , help="Don't print match: or file: before lines")
 parser.add_line()
-_group.add_argument("--print-directories"         , "-d", action="store_true"                   , help="Print names of explored directories")
+_group.add_argument("--print-dir-names"           , "-d", action="store_true"                   , help="Print names of explored directories")
 _group.add_argument("--print-file-names"          , "-n", action="store_true"                   , help="Print file names as well as matches")
 _group.add_argument("--print-full-paths"          , "-p", action="store_true"                   , help="Print full file paths")
 _group.add_argument("--print-posix-paths"         , "-P", action="store_true"                   , help="Replace \\ with / when printing file paths")
@@ -381,6 +384,7 @@ _group.add_argument("--if-no-dir-exec-after"      ,                             
 _group=parser.add_argument_group("Debugging/Advanced")
 _group.add_argument("--order"                     ,       nargs="+", default=DEFAULTORDER          , help="The order in which modifications to matches are applied. Run jrep --help order for more info")
 _group.add_argument("--no-flush"                  ,       action="store_true"                      , help="Improves speed by disabling manually flushing the stdout buffer (ideal for chaining commands)")
+_group.add_argument("--force-flush"               ,       action="store_true"                      , help="Always flush STDOUT (slow)")
 _group.add_argument("--print-rundata"             ,       action="store_true"                      , help="Print raw runData JSON at the end (used for debugging)")
 _group.add_argument("--verbose"                   , "-v", action="store_true"                      , help="Verbose info")
 parsedArgs=parser.parse_args()
@@ -398,16 +402,32 @@ def warn(x, error=None):
 			calls=inspect.stack()[1:]
 			print(f"Waring on lines {', '.join([str(call[2]) for call in calls])} in functions {', '.join([str(call[3]) for call in calls])} : {x}", file=sys.stderr)
 
+# Decide whether or not to flush STDOUT after pritning matches/names/dirs
+_flushStdout=True
+if (parsedArgs.no_flush or not os.isatty(sys.stdout.fileno())) and not parsedArgs.force_flush:
+	_flushStdout=False
+
 verbose("JREP preview version")
 verbose(parsedArgs)
 
 # Handle --enhanced-engine
 if parsedArgs.enhanced_engine:
-	if _regex is None:
-		raise ModuleNotFoundError("--enhanced-engine/-E is unavailable because third party module 'regex' isn't installed")
-	re=_regex
-else:
-	re=_re
+	import regex as re
+
+# Remove unneeded match handlers
+def orderRemove(x):
+	if x in parsedArgs.order:
+		parsedArgs.order.remove(x)
+if not parsedArgs.replace           : orderRemove("replace")
+if not parsedArgs.match_whole_lines : orderRemove("match-whole-lines")
+if not parsedArgs.sub               : orderRemove("sub")
+if not parsedArgs.match_regex and not parsedArgs.match_anti_regex and not parsedArgs.match_ignore_regex:
+	orderRemove("match-regex")
+if not parsedArgs.no_name_duplicates: orderRemove("no-name-duplicates")
+if not parsedArgs.no_duplicates     : orderRemove("no-duplicates")
+if not parsedArgs.print_dir_names   : orderRemove("print-dir-name")
+if not parsedArgs.print_file_names  : orderRemove("print-name")
+if     parsedArgs.dont_print_matches: orderRemove("print-match")
 
 # Verify --replace
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
@@ -416,6 +436,7 @@ if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedAr
 		error=ValueError("Error: Length of --replace must be either 1 or equal to the number of regexes")
 	)
 
+# Functions for --name-regex and co.
 def regexCheckerThing(partial, partialPass, partialFail, full="", fullPass=[], fullFail=[], partialIgnore=[], fullIgnore=[]):
 	"""
 		True  = Passed
@@ -490,6 +511,7 @@ def dirnameChecker(dirname):
 		parsedArgs.dir_full_name_ignore_regex
 	)
 
+# glob overrides
 def _iterdir(dirname, dir_fd, dironly=False):
 	"""
 		A modified version of glob._iterdir for both customization and optimization
@@ -576,6 +598,7 @@ def _rlistdir(dirname, dir_fd, dironly=False):
 					break
 glob._rlistdir=_rlistdir
 
+# Helper functions
 def handleCount(rules, runData):
 	"""
 		Prints out --count data
@@ -733,7 +756,7 @@ def getFiles():
 			A simple wrapper for glob.iglob that allows for using *:/ and ?:/ in glob patterns
 			May cause issues with stuff like SD to USB adapters with no media inserted. I can't test that right now
 		"""
-		if re.match(r"^[*?]:", pattern):
+		if pattern.startswith("*:") or pattern.startswith("?:"):
 			for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
 				yield from glob.iglob(letter+pattern[1:], recursive=recursive)
 		else:
@@ -836,27 +859,48 @@ def escape(match):
 		return ret
 	return match
 
-def checkLimits(sn):
+noLimits=[]
+def checkLimitCategory(sn, filters="tpf"):
+	if sn in noLimits:
+		return None
+
+	noLimitCategory=True
+	for filter in filters:
+		ret=checkLimit(sn+filter)
+		if ret is None:
+			noLimits.append(sn+filter)
+		elif ret is False:
+			noLimitCategory=False
+		elif ret is True:
+			return True
+
+	if noLimitCategory:
+		for _ in filters:
+			noLimits.pop()
+		noLimits.append(sn)
+
+def getLimitValue(sn):
+	nameMap={"t":"total","d":"dir","f":"file","m":"match"}
+	typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
+	plural="e"*(sn[1]=="m")+"s"
+	try:
+		return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
+	except KeyError:
+		return 0
+
+def checkLimit(sn):
 	"""
 		Given an LCName's "short name" (total-files -> tf),
 		check whether or not it's exceeded its value in --limit (if set)
 		Like handleCount, this function is quite jank, but it works
 	"""
-	def getValue(sn):
-		nameMap={"t":"total","d":"dir","f":"file","m":"match"}
-		typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
-		plural="e"*(sn[1]=="m")+"s"
-		try:
-			return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
-		except KeyError:
-			return 0
-	limit=parsedArgs.limit[sn]
-	if limit==0 and sn[2]=="p":
-		# Makes file-match an alias for file-match-passed
-		limit=parsedArgs.limit[sn[:2]]
-	if limit==0:
+	if sn in noLimits:
 		return False
-	value=getValue(sn)
+
+	limit=parsedArgs.limit[sn]
+	if limit==0:
+		return None
+	value=getLimitValue(sn)
 	return value>=limit
 
 def delayedSub(repl, match):
@@ -904,6 +948,8 @@ def funcSub(parsedArgs, match, regexIndex, **kwargs):
 	"""
 		Handle --sub
 	"""
+	if not parsedArgs.sub:
+		return match
 	return JSObj({
 		**match,
 		0:_funcSub(parsedArgs.sub, match[0], regexIndex, **kwargs)
@@ -982,7 +1028,7 @@ def execHandler(cmd, arg=None):
 
 	sp.run(cmd, shell=True)
 
-def funcPrintDir(parsedArgs, runData, currDir, **kwargs):
+def funcPrintDirName(parsedArgs, runData, currDir, **kwargs):
 	"""
 		Handle --print-directories
 	"""
@@ -999,10 +1045,10 @@ def funcPrintDir(parsedArgs, runData, currDir, **kwargs):
 		# --pre-dir-exec
 		execHandler(parsedArgs.pre_dir_exec, pDirName)
 
-	if parsedArgs.print_directories:
+	if parsedArgs.print_dir_names:
 		sys.stdout.buffer.write(ofmt["dname"]+pDirName)
 		sys.stdout.buffer.write(b"\n")
-		if not parsedArgs.no_flush:
+		if _flushStdout:
 			sys.stdout.buffer.flush()
 		runData["dir"]["printedName"]=True
 
@@ -1030,7 +1076,7 @@ def funcPrintName(parsedArgs, file, runData, **kwargs):
 	if parsedArgs.print_file_names:
 		sys.stdout.buffer.write(ofmt["fname"]+pFileName)
 		sys.stdout.buffer.write(b"\n")
-		if not parsedArgs.no_flush:
+		if _flushStdout:
 			sys.stdout.buffer.flush()
 	runData["file"]["printedName"]=True
 
@@ -1060,7 +1106,7 @@ def printMatch(match, regexIndex):
 		sys.stdout.buffer.write(ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
 		sys.stdout.buffer.write(escape(match[0]))
 		sys.stdout.buffer.write(b"\n")
-		if not parsedArgs.no_flush:
+		if _flushStdout:
 			sys.stdout.buffer.flush()
 
 	if parsedArgs.match_exec is not None:
@@ -1080,18 +1126,18 @@ def funcNoDuplicates(parsedArgs, match, **kwargs):
 	"""
 		Handle --no-duplicates
 	"""
-	if match[0] in runData["matchedStrings"]:
-		raise NextMatch()
 	if parsedArgs.no_duplicates:
+		if match[0] in runData["matchedStrings"]:
+			raise NextMatch()
 		runData["matchedStrings"].append(match[0])
 
 def funcNoNameDuplicates(parsedArgs, file, **kwargs):
 	"""
 		Handle --no-name-duplicates
 	"""
-	if processFileName(file["name"]) in runData["filenames"]:
-		raise NextFile()
 	if parsedArgs.no_name_duplicates:
+		if processFileName(file["name"]) in runData["filenames"]:
+			raise NextFile()
 		runData["filenames"].append(processFileName(file["name"]))
 
 def funcPrintFailedFile(parsedArgs, file, runData, **kwargs):
@@ -1162,15 +1208,15 @@ runData={
 }
 
 funcs={
-	"print-dir"         : funcPrintDir,
-	"replace"           : funcReplace,
-	"sub"               : funcSub,
-	"match-whole-lines" : funcMatchWholeLines,
-	"match-regex"       : funcMatchRegex,
-	"print-name"        : funcPrintName,
-	"print-match"       : funcPrintMatch,
-	"no-duplicates"     : funcNoDuplicates,
-	"no-name-duplicates": funcNoNameDuplicates,
+	"print-dir-name"          : funcPrintDirName,
+	"replace"                 : funcReplace,
+	"sub"                     : funcSub,
+	"match-whole-lines"       : funcMatchWholeLines,
+	"match-regex"             : funcMatchRegex,
+	"print-name"              : funcPrintName,
+	"print-match"             : funcPrintMatch,
+	"no-duplicates"           : funcNoDuplicates,
+	"no-name-duplicates"      : funcNoNameDuplicates,
 }
 
 # Output fstrings to make later usage easier
@@ -1238,7 +1284,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 				verbose("Just exited a directory")
 				handleCount(rules=["dir"], runData=runData)
 			# Handle --limit total-dir
-		if checkLimits("tdp") or checkLimits("tdf") or checkLimits("tdt"):
+		if checkLimitCategory("td"):
 			verbose("Total directory limit reached; Exiting...")
 			break
 		runData["total"]["totalDirs"]+=1
@@ -1405,9 +1451,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 						runData["file" ]["passedMatchesPerRegex"][regexIndex]+=1
 
 					# Handle --match-limit, --dir-match-limit, and --total-match-limit
-					if checkLimits("tmt") or checkLimits("tmp") or checkLimits("tmf") or\
-					   checkLimits("dmt") or checkLimits("dmp") or checkLimits("dmf") or\
-					   checkLimits("fmt") or checkLimits("fmp") or checkLimits("fmf"):
+					if checkLimitCategory("tm") or checkLimitCategory("dm") or checkLimitCategory("fm"):
 						break
 
 			except Exception as AAAAA:
@@ -1426,18 +1470,17 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 	handleCount(rules=["file"], runData=runData)
 
 	# Hanlde --limit total-matches and total-files
-	if checkLimits("tmt") or checkLimits("tmp") or checkLimits("tmf"):
+	if checkLimitCategory("tm"):
 		verbose("Total match limit reached; Exiting")
 		break
-	if checkLimits("tft") or checkLimits("tfp") or checkLimits("tfh") or checkLimits("tff"):
+	if checkLimitCategory("tf", filters="ptfh"):
 		verbose("Total file limit reached; Exiting")
 		break
 
 	# Handle --limit dir-files and dir-matches
 	# Really slow on big directories
 	# Might eventually have this hook into _iterdir using a global flag or something
-	if checkLimits("dft") or checkLimits("dfp") or checkLimits("dff") or\
-	   checkLimits("dmt") or checkLimits("dmp") or checkLimits("dmf"):
+	if checkLimitCategory("df", filters="ptfh") or checkLimitCategory("dm"):
 		verbose("Dir limit(s) reached")
 		runData["doneDir"]=True
 
