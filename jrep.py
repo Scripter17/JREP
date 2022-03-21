@@ -41,6 +41,7 @@ DEFAULTORDER=[
 	"replace",
 	"match-whole-lines",
 	"sub",
+	"stdin-anti-match-strings",
 	"match-regex",
 	"no-name-duplicates",
 	"no-duplicates",
@@ -418,16 +419,17 @@ if parsedArgs.enhanced_engine:
 def orderRemove(x):
 	if x in parsedArgs.order:
 		parsedArgs.order.remove(x)
-if not parsedArgs.replace           : orderRemove("replace")
-if not parsedArgs.match_whole_lines : orderRemove("match-whole-lines")
-if not parsedArgs.sub               : orderRemove("sub")
+if not parsedArgs.replace                 : orderRemove("replace")
+if not parsedArgs.match_whole_lines       : orderRemove("match-whole-lines")
+if not parsedArgs.sub                     : orderRemove("sub")
+if not parsedArgs.stdin_anti_match_strings: orderRemove("stdin-anti-match-strings")
 if not parsedArgs.match_regex and not parsedArgs.match_anti_regex and not parsedArgs.match_ignore_regex:
 	orderRemove("match-regex")
-if not parsedArgs.no_name_duplicates: orderRemove("no-name-duplicates")
-if not parsedArgs.no_duplicates     : orderRemove("no-duplicates")
-if not parsedArgs.print_dir_names   : orderRemove("print-dir-name")
-if not parsedArgs.print_file_names  : orderRemove("print-name")
-if     parsedArgs.dont_print_matches: orderRemove("print-match")
+if not parsedArgs.no_name_duplicates      : orderRemove("no-name-duplicates")
+if not parsedArgs.no_duplicates           : orderRemove("no-duplicates")
+if not parsedArgs.print_dir_names         : orderRemove("print-dir-name")
+if not parsedArgs.print_file_names        : orderRemove("print-name")
+if     parsedArgs.dont_print_matches      : orderRemove("print-match")
 
 # Verify --replace
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
@@ -860,8 +862,27 @@ def escape(match):
 	return match
 
 noLimits=[]
-def checkLimitCategory(sn, filters="tpf"):
-	if sn in noLimits:
+def checkLimitType(sn, filters="ptf"):
+	cats={"d":"t", "f":"td", "m":"tdf"}[sn]
+	#if sn in noLimits:
+	#	return False
+
+	noLimitType=True
+	for category in cats:
+		ret=checkLimitCategory(category+sn, filters=filters)
+		if ret is False:
+			noLimitType=False
+		if ret is True:
+			return True
+
+	if noLimitType:
+		for cat in cats:
+			noLimits.remove(cat+sn)
+		noLimits.append(sn)
+	return False
+
+def checkLimitCategory(sn, filters="ptf"):
+	if sn in noLimits or sn[1] in noLimits:
 		return None
 
 	noLimitCategory=True
@@ -878,6 +899,7 @@ def checkLimitCategory(sn, filters="tpf"):
 		for _ in filters:
 			noLimits.pop()
 		noLimits.append(sn)
+	return False
 
 def getLimitValue(sn):
 	nameMap={"t":"total","d":"dir","f":"file","m":"match"}
@@ -909,12 +931,11 @@ def delayedSub(repl, match):
 		Used exclusively for --replace
 	"""
 	parsedTemplate=sre_parse.parse_template(repl, match.re)
+	groups=[match[0], *match.groups()]
 	for x in parsedTemplate[0]:
-		parsedTemplate[1][x[0]]=match[x[1]]
-	return JSObj({
-		**match,
-		0:type(parsedTemplate[1][0])().join(parsedTemplate[1])
-	})
+		parsedTemplate[1][x[0]]=groups[x[1]]
+	match[0]=type(parsedTemplate[1][0])().join(parsedTemplate[1])
+	return match
 
 # Match processors
 
@@ -950,11 +971,8 @@ def funcSub(parsedArgs, match, regexIndex, **kwargs):
 	"""
 	if not parsedArgs.sub:
 		return match
-	return JSObj({
-		**match,
-		0:_funcSub(parsedArgs.sub, match[0], regexIndex, **kwargs)
-		# Probably should be preserving groups too
-	})
+	match[0]=_funcSub(parsedArgs.sub, match[0], regexIndex, **kwargs)
+	return match
 
 def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 	"""
@@ -966,10 +984,7 @@ def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 		lineEnd  =file["data"]. find(b"\n",    match.span()[1])
 		if lineStart==-1: lineStart=None
 		if lineEnd  ==-1: lineEnd  =None
-		return JSObj({
-			**match,
-			0: file["data"][lineStart+1:match.span()[0]]+match[0]+file["data"][match.span()[1]:lineEnd]
-		})
+		match[0]=file["data"][lineStart+1:match.span()[0]]+match[0]+file["data"][match.span()[1]:lineEnd]
 	return match
 
 class NextMatch(Exception):
@@ -984,13 +999,23 @@ class NextFile(Exception):
 	"""
 	pass
 
-def funcMatchRegex(parsedArgs, match, regexIndex, **kwargs):
+def funcStdinAntiMatchStrings(parsedArgs, runData, match, **kwargs):
+	if parsedArgs.stdin_anti_match_strings and _STDIN:
+		if match[0] in _STDIN.splitlines():
+			runData["total"]["failedMatches"        ]            +=1
+			runData["dir"  ]["failedMatches"        ]            +=1
+			runData["file" ]["failedMatches"        ]            +=1
+			runData["total"]["failedMatchesPerRegex"][regexIndex]+=1
+			runData["dir"  ]["failedMatchesPerRegex"][regexIndex]+=1
+			runData["file" ]["failedMatchesPerRegex"][regexIndex]+=1
+			raise NextMatch()
+
+def funcMatchRegex(parsedArgs, runData, match, regexIndex, **kwargs):
 	"""
 		Handle --match-regex and --match-anti-regex
 		Because yes. Filtering matches by using another regex is a feature I genuinely needed
 		Most features in JREP I have actually needed sometimes
 	"""
-	stdinThing=False
 	if parsedArgs.stdin_anti_match_strings and _STDIN:
 		stdinThing=match[0] in _STDIN.splitlines()
 	matchRegexResult=not stdinThing and regexCheckerThing(
@@ -1129,7 +1154,7 @@ def funcNoDuplicates(parsedArgs, match, **kwargs):
 	if parsedArgs.no_duplicates:
 		if match[0] in runData["matchedStrings"]:
 			raise NextMatch()
-		runData["matchedStrings"].append(match[0])
+		runData["matchedStrings"].add(match[0])
 
 def funcNoNameDuplicates(parsedArgs, file, **kwargs):
 	"""
@@ -1200,7 +1225,7 @@ runData={
 		"passedMatchesPerRegex":[],
 		"failedMatchesPerRegex":[],
 	},
-	"matchedStrings":[],  # --no-duplicates handler
+	"matchedStrings":set(),  # --no-duplicates handler
 	"filenames":[],
 	"currDir":None,
 	"lastDir":None,
@@ -1212,6 +1237,7 @@ funcs={
 	"replace"                 : funcReplace,
 	"sub"                     : funcSub,
 	"match-whole-lines"       : funcMatchWholeLines,
+	"stdin-anti-match-strings":	funcStdinAntiMatchStrings,
 	"match-regex"             : funcMatchRegex,
 	"print-name"              : funcPrintName,
 	"print-match"             : funcPrintMatch,
@@ -1418,7 +1444,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 					# Makes handling matches easier
 					match=JSObj({
 						0:match[0],
-						**dict(enumerate(match.groups(), start=1)),
+						#**dict(enumerate(match.groups(), start=1)),
 						"groups":match.groups,
 						"span":match.span,
 						"re":match.re
@@ -1451,7 +1477,7 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 						runData["file" ]["passedMatchesPerRegex"][regexIndex]+=1
 
 					# Handle --match-limit, --dir-match-limit, and --total-match-limit
-					if checkLimitCategory("tm") or checkLimitCategory("dm") or checkLimitCategory("fm"):
+					if "m" not in noLimits and checkLimitType("m"):
 						break
 
 			except Exception as AAAAA:
