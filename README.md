@@ -41,7 +41,7 @@ usage: jrep.py [--help [topic]] [--string] [--enhanced-engine]
                [--match-anti-regex Regex [Regex ...]]
                [--match-ignore-regex Regex [Regex ...]] [--sort SORT]
                [--sort-regex Regex [Regex ...]] [--sort-dir SORT_DIR]
-               [--no-headers] [--print-directories] [--print-file-names]
+               [--no-headers] [--print-dir-names] [--print-file-names]
                [--print-full-paths] [--print-posix-paths]
                [--dont-print-matches] [--print-match-offset]
                [--print-match-range] [--replace Regex [Regex ...]]
@@ -59,7 +59,7 @@ usage: jrep.py [--help [topic]] [--string] [--enhanced-engine]
                [--pre-dir-exec cmd] [--dir-exec cmd]
                [--if-dir-exec-before cmd] [--if-dir-exec-after cmd]
                [--if-no-dir-exec-after cmd] [--order ORDER [ORDER ...]]
-               [--no-flush] [--print-rundata] [--verbose]
+               [--no-flush] [--force-flush] [--print-rundata] [--verbose]
                [Regex ...]
 
 options:
@@ -186,7 +186,7 @@ Output:
   --no-headers, -H                      Don't print match: or file: before
                                         lines
                                         
-  --print-directories, -d               Print names of explored directories
+  --print-dir-names, -d                 Print names of explored directories
   --print-file-names, -n                Print file names as well as matches
   --print-full-paths, -p                Print full file paths
   --print-posix-paths, -P               Replace \ with / when printing file
@@ -280,6 +280,7 @@ Debugging/Advanced:
   --no-flush                            Improves speed by disabling manually
                                         flushing the stdout buffer (ideal for
                                         chaining commands)
+  --force-flush                         Always flush STDOUT (slow)
   --print-rundata                       Print raw runData JSON at the end
                                         (used for debugging)
   --verbose, -v                         Verbose info
@@ -319,7 +320,7 @@ The end result is that file2.jpg is correctly placed before file10.jpg
 
 ## (`order`) `--order` usage
 `--order` determines the order of functions that process matches  
-- The default value for `--order` is replace, match-whole-lines, sub, match-regex, no-name-duplicates, no-duplicates, print-dir, print-name, print-match  
+- The default value for `--order` is replace, match-whole-lines, sub, stdin-anti-match-strings, match-regex, no-name-duplicates, no-duplicates, print-dir-name, print-name, print-match  
 - Changing the order of `sub`, `replace`, and `match-whole-lines` will mostly "work" but the output will make next to no sense  
 - The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain
 

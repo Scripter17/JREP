@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
-import os, sys, subprocess as sp
+import os, sys, subprocess as sp, shutil
 import re, glob, fnmatch, json
 import mmap, itertools, functools, sre_parse, inspect
 
@@ -66,12 +66,15 @@ class JSObj:
 		object.__setattr__(self, "_defaultFactory", defaultFactory)
 
 	def defaultFactory(self, key):
-		if not callable(self._defaultFactory):
+		if self._defaultFactory is None:
 			return self.default
 		try:
 			return self._defaultFactory(self, key)
 		except Exception:
 			return self.default
+
+	def __repr__(self):
+		return f"JSObj({self.obj})"
 
 	def __getattr__(self, key):      return self.obj[key] if key in self.obj else self.defaultFactory(key)
 	def __setattr__(self, key, val):        self.obj[key]=val
@@ -118,7 +121,13 @@ class LimitAction(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string):
 		ret=JSObj({}, default=0)
 		for name, value in map(lambda x:x.split("="), values):
-			ret[parseLCName(name)]=int(value)
+			name=parseLCName(name)
+			ret[name]={}
+			for subvalue in value.split(","):
+				if ":" in subvalue:
+					ret[name][int(subvalue.split(":")[0])]=int(subvalue.split(":")[1])
+				else:
+					ret[name][-1]=int(subvalue)
 		setattr(namespace, self.dest, ret)
 
 class CountAction(argparse.Action):
@@ -193,7 +202,7 @@ class CustomHelpFormatter(argparse.HelpFormatter):
 		Allows --help to better fit the console and adds support for blank lines
 	"""
 	def __init__(self, prog, indent_increment=2, max_help_position=24, width=None):
-		argparse.HelpFormatter.__init__(self, prog, indent_increment, os.get_terminal_size().columns//2, width)
+		argparse.HelpFormatter.__init__(self, prog, indent_increment, shutil.get_terminal_size().columns//2, width)
 	def _split_lines(self, text, width):
 		lines = super()._split_lines(text, width)
 		if "\n" in text:
@@ -427,9 +436,6 @@ if not parsedArgs.match_regex and not parsedArgs.match_anti_regex and not parsed
 	orderRemove("match-regex")
 if not parsedArgs.no_name_duplicates      : orderRemove("no-name-duplicates")
 if not parsedArgs.no_duplicates           : orderRemove("no-duplicates")
-if not parsedArgs.print_dir_names         : orderRemove("print-dir-name")
-if not parsedArgs.print_file_names        : orderRemove("print-name")
-if     parsedArgs.dont_print_matches      : orderRemove("print-match")
 
 # Verify --replace
 if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
@@ -739,8 +745,7 @@ def fileContentsDontMatter():
 		If file contents don't matter, tell getFiles to not even run open() on them
 		JREP doesn't load file contents into memory (it uses mmap) but just opening a file handler takes time
 	"""
-	return parsedArgs.dont_print_matches and\
-	       not any(parsedArgs.regex) and\
+	return not any(parsedArgs.regex) and\
 	       not parsedArgs.file_regex and not parsedArgs.file_anti_regex and\
 	       not any(map(lambda x:re.search(r"[tdf]m", x), parsedArgs.limit.keys())) and\
 	       not any(map(lambda x:re.search(r"^[tdf]m(([pf]c)?[tr])?$", x), parsedArgs.count))
@@ -910,6 +915,17 @@ def getLimitValue(sn):
 	except KeyError:
 		return 0
 
+def getLimitTotalValue(sn):
+	nameMap={"t":"total","d":"dir","f":"file","m":"match"}
+	typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
+	plural="e"*(sn[1]=="m")+"s"
+	try:
+		catData=runData[nameMap[sn[0]]]
+		subCat=typeMap[sn[2]]+nameMap[sn[1]].title()+plural
+		return sum(catData["_"+subCat]) if "_"+subCat in catData else catData[subCat]
+	except KeyError:
+		return 0
+
 def checkLimit(sn):
 	"""
 		Given an LCName's "short name" (total-files -> tf),
@@ -923,7 +939,20 @@ def checkLimit(sn):
 	if limit==0:
 		return None
 	value=getLimitValue(sn)
-	return value>=limit
+	if isinstance(limit, dict):
+		totalValue=getLimitTotalValue(sn)
+		# print(
+		# 	runData["currDirDepth"],
+		# 	limit,
+		# 	value,
+		# 	totalValue,
+		# 	(runData["currDirDepth"] in limit and value>=limit[runData["currDirDepth"]]),
+		# 	(-1 in limit and totalValue>=limit[-1])
+		# )
+		return (runData["currDirDepth"] in limit and value>=limit[runData["currDirDepth"]])\
+			or (-1 in limit and totalValue>=limit[-1])
+	else:
+		return value>=limit
 
 def delayedSub(repl, match):
 	"""
@@ -944,11 +973,9 @@ def funcReplace(parsedArgs, match, regexIndex, **kwargs):
 		Handle --replace
 		Uses the secret sre_parse module to commit anti-Pythonic blasphemy
 	"""
-	if parsedArgs.replace:
-		replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
-		match=delayedSub(replacement.encode(errors="ignore"), match)
-	return match
-
+	replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
+	return delayedSub(replacement.encode(errors="ignore"), match)
+	
 def _funcSub(subRules, match, regexIndex, wrap=True, **kwargs):
 	"""
 		Handle --sub, --name-sub, and --dir-name-sub
@@ -969,8 +996,6 @@ def funcSub(parsedArgs, match, regexIndex, **kwargs):
 	"""
 		Handle --sub
 	"""
-	if not parsedArgs.sub:
-		return match
 	match[0]=_funcSub(parsedArgs.sub, match[0], regexIndex, **kwargs)
 	return match
 
@@ -979,12 +1004,11 @@ def funcMatchWholeLines(parsedArgs, match, file, **kwargs):
 		Handle --match-whole-lines
 		Very jank; Needs to be improved
 	"""
-	if parsedArgs.match_whole_lines:
-		lineStart=file["data"].rfind(b"\n", 0, match.span()[1])
-		lineEnd  =file["data"]. find(b"\n",    match.span()[1])
-		if lineStart==-1: lineStart=None
-		if lineEnd  ==-1: lineEnd  =None
-		match[0]=file["data"][lineStart+1:match.span()[0]]+match[0]+file["data"][match.span()[1]:lineEnd]
+	lineStart=file["data"].rfind(b"\n", 0, match.span()[1])
+	lineEnd  =file["data"]. find(b"\n",    match.span()[1])
+	if lineStart==-1: lineStart=None
+	if lineEnd  ==-1: lineEnd  =None
+	match[0]=file["data"][lineStart+1:match.span()[0]]+match[0]+file["data"][match.span()[1]:lineEnd]
 	return match
 
 class NextMatch(Exception):
@@ -1000,15 +1024,14 @@ class NextFile(Exception):
 	pass
 
 def funcStdinAntiMatchStrings(parsedArgs, runData, match, **kwargs):
-	if parsedArgs.stdin_anti_match_strings and _STDIN:
-		if match[0] in _STDIN.splitlines():
-			runData["total"]["failedMatches"        ]            +=1
-			runData["dir"  ]["failedMatches"        ]            +=1
-			runData["file" ]["failedMatches"        ]            +=1
-			runData["total"]["failedMatchesPerRegex"][regexIndex]+=1
-			runData["dir"  ]["failedMatchesPerRegex"][regexIndex]+=1
-			runData["file" ]["failedMatchesPerRegex"][regexIndex]+=1
-			raise NextMatch()
+	if match[0] in _STDIN.splitlines():
+		runData["total"]["failedMatches"        ]            +=1
+		runData["dir"  ]["failedMatches"        ]            +=1
+		runData["file" ]["failedMatches"        ]            +=1
+		runData["total"]["failedMatchesPerRegex"][regexIndex]+=1
+		runData["dir"  ]["failedMatchesPerRegex"][regexIndex]+=1
+		runData["file" ]["failedMatchesPerRegex"][regexIndex]+=1
+		raise NextMatch()
 
 def funcMatchRegex(parsedArgs, runData, match, regexIndex, **kwargs):
 	"""
@@ -1151,19 +1174,17 @@ def funcNoDuplicates(parsedArgs, match, **kwargs):
 	"""
 		Handle --no-duplicates
 	"""
-	if parsedArgs.no_duplicates:
-		if match[0] in runData["matchedStrings"]:
-			raise NextMatch()
-		runData["matchedStrings"].add(match[0])
+	if match[0] in runData["matchedStrings"]:
+		raise NextMatch()
+	runData["matchedStrings"].add(match[0])
 
 def funcNoNameDuplicates(parsedArgs, file, **kwargs):
 	"""
 		Handle --no-name-duplicates
 	"""
-	if parsedArgs.no_name_duplicates:
-		if processFileName(file["name"]) in runData["filenames"]:
-			raise NextFile()
-		runData["filenames"].append(processFileName(file["name"]))
+	if processFileName(file["name"]) in runData["filenames"]:
+		raise NextFile()
+	runData["filenames"].append(processFileName(file["name"]))
 
 def funcPrintFailedFile(parsedArgs, file, runData, **kwargs):
 	"""
@@ -1204,33 +1225,42 @@ runData={
 		"failedMatchesPerRegex":[],
 	},
 	"total":{
-		"totalDirs" :0,
-		"passedDirs":0,
-		"failedDirs":0,
-		"dirsPerRegex":[],
+		"_totalDirs" :[],
+		"_passedDirs":[],
+		"_failedDirs":[],
+		"_dirsPerRegex":[],
 
-		"totalFiles"  :0,
-		"passedFiles" :0,
-		"handledFiles":0,
-		"failedFiles" :0,
-		"totalFilesPerRegex"  :[],
-		"passedFilesPerRegex" :[],
-		"handledFilesPerRegex":[],
-		#"failedFilesPerRegex" :[],
+		"_totalFiles"  :[],
+		"_passedFiles" :[],
+		"_handledFiles":[],
+		"_failedFiles" :[],
+		"_totalFilesPerRegex"  :[],
+		"_passedFilesPerRegex" :[],
+		"_handledFilesPerRegex":[],
+		#"_failedFilesPerRegex" :[],
 
-		"totalMatches" :0,
-		"passedMatches":0,
-		"failedMatches":0,
-		"totalMatchesPerRegex" :[],
-		"passedMatchesPerRegex":[],
-		"failedMatchesPerRegex":[],
+		"_totalMatches" :[],
+		"_passedMatches":[],
+		"_failedMatches":[],
+		"_totalMatchesPerRegex" :[],
+		"_passedMatchesPerRegex":[],
+		"_failedMatchesPerRegex":[],
 	},
 	"matchedStrings":set(),  # --no-duplicates handler
 	"filenames":[],
 	"currDir":None,
+	"currDirDepth":None,
 	"lastDir":None,
+	"lastDirDepth":None,
 	"doneDir":False,
 }
+
+for key in list(runData["total"]):
+	if key.startswith("_"):
+		if key.endswith("PerRegex"):
+			runData["total"][key.removeprefix("_")]=[0 for x in parsedArgs.regex]
+		else:
+			runData["total"][key.removeprefix("_")]=0
 
 funcs={
 	"print-dir-name"          : funcPrintDirName,
@@ -1261,20 +1291,24 @@ ofmt={
 	"countTotal"   : ("{cat} {subCat} (R{regexIndex}): "         *_header)+"{value}",
 }
 
-def argumentFactory(obj, name):	
-	if name in obj.obj:
-		return obj.obj[name]
-	else:
-		return parser.get_default(name)
+def dirDepth(x):
+	# Weird how len(filter(...)) doesn't work
+	if x is None:
+		return None
+	return len(list(filter(lambda x:x, x.replace("\\", "/").split("/"))))
 
-# Intialize runData["total"]
-runData["total"]["totalMatchesPerRegex" ]=[0 for x in parsedArgs.regex]
-runData["total"]["passedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
-runData["total"]["failedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
-runData["total"]["totalFilesPerRegex"   ]=[0 for x in parsedArgs.regex]
-runData["total"]["passedFilesPerRegex"  ]=[0 for x in parsedArgs.regex]
-runData["total"]["handledFilesPerRegex" ]=[0 for x in parsedArgs.regex]
-runData["total"]["dirsPerRegex"         ]=[0 for x in parsedArgs.regex]
+def newDirDepth():
+	for key in runData["total"]:
+		if not key.startswith("_"):
+			continue
+		while len(runData["total"][key])<=runData["currDirDepth"]:
+			if key.endswith("PerRegex"):
+				runData["total"][key].append([0 for x in parsedArgs.regex])
+			else:
+				runData["total"][key].append(0)
+		if runData["lastDirDepth"] is not None:
+			runData["total"][key][runData["lastDirDepth"]]=runData["total"][key.removeprefix("_")]
+		runData["total"][key.removeprefix("_")]=runData["total"][key][runData["currDirDepth"]]
 
 # The main file loop
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
@@ -1300,10 +1334,14 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# Keep track of when new directories are entered
 	runData["lastDir"]=runData["currDir"]
+	runData["lastDirDepth"]=dirDepth(runData["lastDir"])
 	runData["currDir"]=os.path.dirname(file["name"])
+	runData["currDirDepth"]=dirDepth(runData["currDir"])
 
 	# Handle new directories
 	if runData["lastDir"]!=runData["currDir"]:
+		newDirDepth()
+
 		if runData["dir"]["passedFiles"]:
 			# Print data from last dir (--count)
 			if runData["lastDir"] is not None:
@@ -1393,8 +1431,8 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 			for func in parsedArgs.order:
 				if func=="print-name":
 					funcs["print-name"](parsedArgs, file, runData)
-				elif func=="print-dir":
-					funcs["print-dir"](parsedArgs, runData, runData["currDir"])
+				elif func=="print-dir-name":
+					funcs["print-dir-name"](parsedArgs, runData, runData["currDir"])
 				elif func=="no-name-duplicates":
 					try:
 						funcs["no-name-duplicates"](parsedArgs, file)
