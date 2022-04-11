@@ -86,26 +86,6 @@ class JSObj:
 
 	def keys(self): return self.obj.keys() # Makes **JSObj work
 
-# Helper function for generating the --limiy/--count parser regex
-# _LCNameRegexPart=lambda *opts: "(?:"+"|".join([f"({opt[0]})(?:{opt[1:]})?" for opt in opts])+")"
-# _LCNameRegex=_LCNameRegexPart(r"files?"       , r"dir(?:ectori(?:es|y))?", r"total"                             )    +r"[-_]?"+\
-#              _LCNameRegexPart(r"match(?:e?s)?", r"files?"                , r"dir(?:ectori(?:es|y))?"            )    +r"[-_]?"+\
-#              _LCNameRegexPart(r"total"        , r"fail(?:u(?:re)?s?|d)"  , r"pass(?:e?[sd])?"       , "handled?")+"?"+r"[-_]?"+\
-#              _LCNameRegexPart(r"counts?"      , r"percent(?:age)?s?"                                            )+"?"+r"[-_]?"+\
-#              _LCNameRegexPart(r"regex"        , r"total"                                                        )+"?"
-# _LCNameRegex=f"^{_LCNameRegex}$"
-
-# def parseLCName(name):
-# 	"""
-# 		Normalize all ways --limit or --count targets can be written
-# 	"""
-# 	if len(name)==2:
-# 		name+="p"
-# 	match=re.match(_LCNameRegex, name, re.I)
-# 	if match:
-# 		return "".join(filter(lambda x:x, match.groups())).lower()
-# 	return name
-
 def parseLCName(name):
 	name=name.replace("-", "_")
 	if len(name)==2:
@@ -121,13 +101,7 @@ class LimitAction(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string):
 		ret=JSObj({}, default=0)
 		for name, value in map(lambda x:x.split("="), values):
-			name=parseLCName(name)
-			ret[name]={}
-			for subvalue in value.split(","):
-				if ":" in subvalue:
-					ret[name][int(subvalue.split(":")[0])]=int(subvalue.split(":")[1])
-				else:
-					ret[name][-1]=int(subvalue)
+			ret[parseLCName(name)]=int(value)
 		setattr(namespace, self.dest, ret)
 
 class CountAction(argparse.Action):
@@ -915,17 +889,6 @@ def getLimitValue(sn):
 	except KeyError:
 		return 0
 
-def getLimitTotalValue(sn):
-	nameMap={"t":"total","d":"dir","f":"file","m":"match"}
-	typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
-	plural="e"*(sn[1]=="m")+"s"
-	try:
-		catData=runData[nameMap[sn[0]]]
-		subCat=typeMap[sn[2]]+nameMap[sn[1]].title()+plural
-		return sum(catData["_"+subCat]) if "_"+subCat in catData else catData[subCat]
-	except KeyError:
-		return 0
-
 def checkLimit(sn):
 	"""
 		Given an LCName's "short name" (total-files -> tf),
@@ -939,20 +902,7 @@ def checkLimit(sn):
 	if limit==0:
 		return None
 	value=getLimitValue(sn)
-	if isinstance(limit, dict):
-		totalValue=getLimitTotalValue(sn)
-		# print(
-		# 	runData["currDirDepth"],
-		# 	limit,
-		# 	value,
-		# 	totalValue,
-		# 	(runData["currDirDepth"] in limit and value>=limit[runData["currDirDepth"]]),
-		# 	(-1 in limit and totalValue>=limit[-1])
-		# )
-		return (runData["currDirDepth"] in limit and value>=limit[runData["currDirDepth"]])\
-			or (-1 in limit and totalValue>=limit[-1])
-	else:
-		return value>=limit
+	return value>=limit
 
 def delayedSub(repl, match):
 	"""
@@ -1225,42 +1175,33 @@ runData={
 		"failedMatchesPerRegex":[],
 	},
 	"total":{
-		"_totalDirs" :[],
-		"_passedDirs":[],
-		"_failedDirs":[],
-		"_dirsPerRegex":[],
+		"totalDirs" :0,
+		"passedDirs":0,
+		"failedDirs":0,
+		"dirsPerRegex":[],
 
-		"_totalFiles"  :[],
-		"_passedFiles" :[],
-		"_handledFiles":[],
-		"_failedFiles" :[],
-		"_totalFilesPerRegex"  :[],
-		"_passedFilesPerRegex" :[],
-		"_handledFilesPerRegex":[],
-		#"_failedFilesPerRegex" :[],
+		"totalFiles"  :0,
+		"passedFiles" :0,
+		"handledFiles":0,
+		"failedFiles" :0,
+		"totalFilesPerRegex"  :[],
+		"passedFilesPerRegex" :[],
+		"handledFilesPerRegex":[],
+		#"failedFilesPerRegex" :[],
 
-		"_totalMatches" :[],
-		"_passedMatches":[],
-		"_failedMatches":[],
-		"_totalMatchesPerRegex" :[],
-		"_passedMatchesPerRegex":[],
-		"_failedMatchesPerRegex":[],
+		"totalMatches" :0,
+		"passedMatches":0,
+		"failedMatches":0,
+		"totalMatchesPerRegex" :[],
+		"passedMatchesPerRegex":[],
+		"failedMatchesPerRegex":[],
 	},
 	"matchedStrings":set(),  # --no-duplicates handler
 	"filenames":[],
 	"currDir":None,
-	"currDirDepth":None,
 	"lastDir":None,
-	"lastDirDepth":None,
 	"doneDir":False,
 }
-
-for key in list(runData["total"]):
-	if key.startswith("_"):
-		if key.endswith("PerRegex"):
-			runData["total"][key.removeprefix("_")]=[0 for x in parsedArgs.regex]
-		else:
-			runData["total"][key.removeprefix("_")]=0
 
 funcs={
 	"print-dir-name"          : funcPrintDirName,
@@ -1291,25 +1232,6 @@ ofmt={
 	"countTotal"   : ("{cat} {subCat} (R{regexIndex}): "         *_header)+"{value}",
 }
 
-def dirDepth(x):
-	# Weird how len(filter(...)) doesn't work
-	if x is None:
-		return None
-	return len(list(filter(lambda x:x, x.replace("\\", "/").split("/"))))
-
-def newDirDepth():
-	for key in runData["total"]:
-		if not key.startswith("_"):
-			continue
-		while len(runData["total"][key])<=runData["currDirDepth"]:
-			if key.endswith("PerRegex"):
-				runData["total"][key].append([0 for x in parsedArgs.regex])
-			else:
-				runData["total"][key].append(0)
-		if runData["lastDirDepth"] is not None:
-			runData["total"][key][runData["lastDirDepth"]]=runData["total"][key.removeprefix("_")]
-		runData["total"][key.removeprefix("_")]=runData["total"][key][runData["currDirDepth"]]
-
 # The main file loop
 for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
 	verbose(f"Processing \"{file['name']}\"")
@@ -1334,14 +1256,10 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 
 	# Keep track of when new directories are entered
 	runData["lastDir"]=runData["currDir"]
-	runData["lastDirDepth"]=dirDepth(runData["lastDir"])
 	runData["currDir"]=os.path.dirname(file["name"])
-	runData["currDirDepth"]=dirDepth(runData["currDir"])
 
 	# Handle new directories
 	if runData["lastDir"]!=runData["currDir"]:
-		newDirDepth()
-
 		if runData["dir"]["passedFiles"]:
 			# Print data from last dir (--count)
 			if runData["lastDir"] is not None:
