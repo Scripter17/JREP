@@ -293,45 +293,9 @@ The following have extended help that can be seen with --help [topic]: sub, bloc
 These can be accessed by doing `jrep --help [topic]` where `[topic]` is the part in parenthesis
 
 <!--<EXTHELP MSGS>-->
-## (`sub`) --sub advanced usage
-The easiest way to explain advanced uses of `--sub` is to give an example. So take `--sub a ? b ? c d e f + x ? y z * ? t ? e d * abc xyz` as an example.    
-What it means is the following
-  
-- `a ? b ? c d e f`: If a match from get regex 0 matches `a` and not `b`, replace `c` with `d` and `e` with `f`  
-- `+`: New conditions but stay on the same get regex  
-- `x ? y z`: If a match from get regex 0 matches `x`, replace `y` with `z`  
-- `*`: Move on to the next get regex  
-- `? t ? e d`: If a match from get regex 1 does't match `t`, replace `e` with `d`  
-- `*`: Move on to the next get regex  
-- `abc xyz`: Replace `abc` with `xyz` without any conditions  
-  
-Obviously 99% of use cases don't need conditionals at all so just doing `--sub abc def * uvw xyz` is sufficient
 
-## (`blockwise`) Blockwise sorting
-A generic sort function will think "file10.jpg" comes before "file2.jpg"  
-Windows, on the other hand, has code that treats the number part as a number  
-Blockwise sort mimics this behaviour by  
-1. Splitting filenames into groups of number and non-number characters. Ex. `abc123def456.jpg` -> `["abc", "123", "def", "456", ".jpg"]`  
-2. When comparing 2 filenames, compare the first element ("block") of both name's lists according to the following two rules
-	1. If either block is made of non-number characters, compare the two blocks as strings  
-	2. If both blocks are numbers, compare them as numbers  
-  
-The end result is that file2.jpg is correctly placed before file10.jpg
 
-## (`order`) `--order` usage
-`--order` determines the order of functions that process matches  
-- The default value for `--order` is replace, match-whole-lines, sub, stdin-anti-match-strings, match-regex, no-name-duplicates, no-duplicates, print-dir-name, print-name, print-match  
-- Changing the order of `sub`, `replace`, and `match-whole-lines` will mostly "work" but the output will make next to no sense  
-- The main purpose of this is to move `match-regex` and `no-duplicates` to earlier in the chain
 
-## (`exec`) Using the `--exec` family of options
-Usage looks like `--exec "echo {}"` or just `--exec "echo"`  
-`--match-exec`/`--exec`: after  printing matches  
-`--pre-match-exec`: before printing matches  
-`--match-exec`: after  printing file names  
-`--pre-match-exec`: before printing file names  
-`--dir-exec`: after  printing directory names  
-`--pre-dir-exec`: before printing directory names
 <!--</EXTHELP MSGS>-->
 
 # Compatibility
