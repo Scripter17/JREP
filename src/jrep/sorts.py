@@ -1,4 +1,4 @@
-import re, functools
+import re, functools, os
 
 blockwiseSplit=re.compile(r"\d+|\D+")
 def _blockwise(x, y):
@@ -29,15 +29,26 @@ def blockwise(x, y):
 		if ret: return ret
 	return len(xlist)-len(ylist)
 
+@functools.cmp_to_key
+def nameSort(x, y):
+	return (x>y)-(x<y)
+
 sorts={
 	"ctime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_ctime,
 	"mtime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_mtime,
 	"atime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_atime,
-	"name"     : lambda x:x["name"],
-	"blockwise": lambda x:sorts.blockwiseSort(x["name"]),
+	"name"     : lambda x:nameSort(x["name"]),
+	"blockwise": lambda x:blockwiseSort(x["name"]),
 	"size"     : lambda x:len(x["data"]) if x["stdin"] else os.path.getsize(x["name"])
 }
-for sortKey, sortFunc in list(sorts.items()):
+def makeRSort(sort):
+	@functools.cmp_to_key
+	def ret(x, y):
+		x=sorts[sort](x)
+		y=sorts[sort](y)
+		return (y>x)-(y<x)
+	return ret
+
+for sort in list(sorts):
 	# Scopes suck
-	#sorts["r"+sort]=(lambda _sort:lambda x:-sorts[_sort](x))(sort)
-	sorts["r"+sortKey]=lambda x:-sortFunc(x)
+	sorts["r"+sort]=makeRSort(sort)

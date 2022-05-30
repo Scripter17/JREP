@@ -88,8 +88,7 @@ def sortFiles(files, sortRegexes, key=None):
 
 	if key in ["name", "blockwise", "rname", "rblockwise"] and sortRegexes:
 		for pattern, replace in zip(sortRegexes[0::2], sortRegexes[1::2]):
-			files=map(lambda file: {"orig":file["orig"] if "orig" in file else file, "name":re.sub(pattern, replace, file["name"])}, files)
-
+			files=map({"orig":file["orig"] if "orig" in file else file, "name":re.sub(pattern, replace, file["name"])}, files)
 	return map(lambda x:x["orig"] if "orig" in x else x, sorted(files, key=sorts.sorts[key]))
 
 	#return sorted(files, key=sorts[key])
@@ -103,7 +102,7 @@ def sortDirFiles(names, dirname, sortRegexes, key=None):
 		return
 	files=map(lambda name:{"name":os.path.join(dirname, name), "stdin":False}, names)
 	for file in sortFiles(files, sortRegexes, key=key):
-		yield oa.path.relpath(file["name"], dirname)
+		yield os.path.relpath(file["name"], dirname)
 
 def escape(match):
 	r"""
