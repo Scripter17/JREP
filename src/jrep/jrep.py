@@ -881,7 +881,7 @@ def delayedSub(repl, match):
 		Python 3.11: sre_parse is removed, so I stole the function and put it at the top of this file
 		I really need to give up on the "JREP as a single file" dream
 	"""
-	parsedTemplate=parse_template(repl, match.re)
+	parsedTemplate=sre_parse.parse_template(repl, match.re)
 	groups=[match[0], *match.groups()]
 	for x in parsedTemplate[0]:
 		parsedTemplate[1][x[0]]=groups[x[1]]
