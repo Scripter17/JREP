@@ -1,4 +1,4 @@
-import argparse, os, shutil
+import argparse, os, shutil, re
 from . import processors
 
 SUPPRESS=argparse.SUPPRESS
