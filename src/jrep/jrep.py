@@ -1,100 +1,8 @@
 #!/usr/bin/python3
 
-import argparse
-import os, sys, subprocess as sp, shutil
-import re, glob, fnmatch, json
-import mmap, itertools, functools, sre_parse, inspect
-
-try:
-	from sre_parse import parse_template
-except:
-	def parse_template(source, state):
-		# parse 're' replacement string into list of literals and
-		# group references
-		s = Tokenizer(source)
-		sget = s.get
-		groups = []
-		literals = []
-		literal = []
-		lappend = literal.append
-		def addgroup(index, pos):
-			if index > state.groups:
-				raise s.error("invalid group reference %d" % index, pos)
-			if literal:
-				literals.append(''.join(literal))
-				del literal[:]
-			groups.append((len(literals), index))
-			literals.append(None)
-		groupindex = state.groupindex
-		while True:
-			this = sget()
-			if this is None:
-				break # end of replacement string
-			if this[0] == "\\":
-				# group
-				c = this[1]
-				if c == "g":
-					name = ""
-					if not s.match("<"):
-						raise s.error("missing <")
-					name = s.getuntil(">", "group name")
-					if name.isidentifier():
-						try:
-							index = groupindex[name]
-						except KeyError:
-							raise IndexError("unknown group name %r" % name)
-					else:
-						try:
-							index = int(name)
-							if index < 0:
-								raise ValueError
-						except ValueError:
-							raise s.error("bad character in group name %r" % name,
-										  len(name) + 1) from None
-						if index >= MAXGROUPS:
-							raise s.error("invalid group reference %d" % index,
-										  len(name) + 1)
-					addgroup(index, len(name) + 1)
-				elif c == "0":
-					if s.next in OCTDIGITS:
-						this += sget()
-						if s.next in OCTDIGITS:
-							this += sget()
-					lappend(chr(int(this[1:], 8) & 0xff))
-				elif c in DIGITS:
-					isoctal = False
-					if s.next in DIGITS:
-						this += sget()
-						if (c in OCTDIGITS and this[2] in OCTDIGITS and
-							s.next in OCTDIGITS):
-							this += sget()
-							isoctal = True
-							c = int(this[1:], 8)
-							if c > 0o377:
-								raise s.error('octal escape value %s outside of '
-											  'range 0-0o377' % this, len(this))
-							lappend(chr(c))
-					if not isoctal:
-						addgroup(int(this[1:]), len(this) - 1)
-				else:
-					try:
-						this = chr(ESCAPES[this][1])
-					except KeyError:
-						if c in ASCIILETTERS:
-							raise s.error('bad escape %s' % this, len(this))
-					lappend(this)
-			else:
-				lappend(this)
-		if literal:
-			literals.append(''.join(literal))
-		if not isinstance(source, str):
-			# The tokenizer implicitly decodes bytes objects as latin-1, we must
-			# therefore re-encode the final representation.
-			literals = [None if s is None else s.encode('latin-1') for s in literals]
-		return groups, literals
-
 """
-	JREP - "Just Release mE Please (I've been in pre-alpha for 6 months)"
+	JREP - James' GREP
+	Version 0.1
 	Made by Github@Scripter17 / Reddit@Scripter17 / Twitter@Scripter171
 	Official repo: https://github.com/Scripter17/JREP
 
@@ -103,27 +11,20 @@ except:
 	(Can be treated as public domain if your project requires that)
 """
 
+import argparse
+import os, sys, subprocess as sp, shutil
+import re, fnmatch, json
+import mmap, itertools, functools, inspect
+# Included with JREP
+try:
+	import sre_parse
+except:
+	import jrep.sre_parse as sre_parse
+import jrep.modded_glob as glob
+
 # Compatibility for old Python versions
 if not hasattr(functools, "cache"):
 	functools.cache=functools.lru_cache(maxsize=None)
-
-if not hasattr(glob, "_listdir"):
-	import contextlib
-	def _listdir(dirname, dir_fd, dironly):
-		"""
-			For Python 3.6 compatibility
-		"""
-		with contextlib.closing(_iterdir(dirname, dir_fd, dironly)) as it:
-			return list(it)
-	glob._listdir=_listdir
-
-if not hasattr(glob, "_join"):
-	def _join(dirname, basename):
-		# It is common if dirname or basename is empty
-		if not dirname or not basename:
-			return dirname or basename
-		return os.path.join(dirname, basename)
-	glob._join=_join
 
 DEFAULTORDER=[
 	"replace",
@@ -474,6 +375,73 @@ def warn(x, error=None):
 			calls=inspect.stack()[1:]
 			print(f"Waring on lines {', '.join([str(call[2]) for call in calls])} in functions {', '.join([str(call[3]) for call in calls])} : {x}", file=sys.stderr)
 
+# Keeping everything like this makes life easier
+# It's a mess but the alternative is worse
+runData={
+	"file": {
+		"printedName":False,
+
+		"totalMatches" :0,
+		"passedMatches":0,
+		"failedMatches":0,
+		"totalMatchesPerRegex" :[],
+		"passedMatchesPerRegex":[],
+		"failedMatchesPerRegex":[],
+	},
+	"dir":{
+		"printedName":False,
+
+		"totalFiles"  :0,
+		"passedFiles" :0,
+		"handledFiles":0,
+		"failedFiles" :0,
+		"totalFilesPerRegex"  :[],
+		"passedFilesPerRegex" :[],
+		"handledFilesPerRegex":[],
+		#"failedFilesPerRegex" :[],
+
+		"totalMatches" :0,
+		"passedMatches":0,
+		"failedMatches":0,
+		"totalMatchesPerRegex" :[],
+		"passedMatchesPerRegex":[],
+		"failedMatchesPerRegex":[],
+	},
+	"total":{
+		"totalDirs" :0,
+		"passedDirs":0,
+		"failedDirs":0,
+		"dirsPerRegex":[],
+
+		"totalFiles"  :0,
+		"passedFiles" :0,
+		"handledFiles":0,
+		"failedFiles" :0,
+		"totalFilesPerRegex"  :[],
+		"passedFilesPerRegex" :[],
+		"handledFilesPerRegex":[],
+		#"failedFilesPerRegex" :[],
+
+		"totalMatches" :0,
+		"passedMatches":0,
+		"failedMatches":0,
+		"totalMatchesPerRegex" :[],
+		"passedMatchesPerRegex":[],
+		"failedMatchesPerRegex":[],
+	},
+	"matchedStrings":set(),  # --no-duplicates handler
+	"filenames":[],
+	"currDir":None,
+	"lastDir":None,
+	"doneDir":False,
+}
+
+# Shove things into modded_glob
+# sortDirFiles is added below
+glob.parsedArgs=parsedArgs
+glob.verbose=verbose
+glob.runData=runData
+
 # Decide whether or not to flush STDOUT after pritning matches/names/dirs
 _flushStdout=True
 if (parsedArgs.no_flush or not os.isatty(sys.stdout.fileno())) and not parsedArgs.force_flush:
@@ -580,93 +548,6 @@ def dirnameChecker(dirname):
 		parsedArgs.dir_name_ignore_regex,
 		parsedArgs.dir_full_name_ignore_regex
 	)
-
-# glob overrides
-def _iterdir(dirname, dir_fd, dironly=False):
-	"""
-		A modified version of glob._iterdir for both customization and optimization
-	"""
-	files=[]
-	directories=[]
-	try:
-		fd = None
-		fsencode = None
-		if isinstance(dir_fd, bool):
-			dir_fd=None
-
-		if dir_fd is not None:
-			if dirname:
-				fd = arg = os.open(dirname, glob._dir_open_flags, dir_fd=dir_fd)
-			else:
-				arg = dir_fd
-			if isinstance(dirname, bytes):
-				fsencode = os.fsencode
-		elif dirname:
-			arg = dirname
-		elif isinstance(dirname, bytes):
-			arg = bytes(os.curdir, 'ASCII')
-		else:
-			arg = os.curdir
-		try:
-			with os.scandir(arg) as it:
-				for entry in it:
-					try:
-						if not dironly or entry.is_dir():
-							if entry.is_dir():
-								directories.append(entry.name)
-							else:
-								if fsencode is not None:
-									files.append(fsencode(entry.name))
-								else:
-									files.append(entry.name)
-					except OSError:
-						pass
-				# Yirld files and folders in the right order
-				files=sortDirFiles(files, dirname, key=parsedArgs.sort_dir)
-				if parsedArgs.depth_first:
-					yield from directories
-					yield from files
-				else:
-					yield from files
-					yield from directories
-		finally:
-			if fd is not None:
-				os.close(fd)
-	except OSError:
-		return
-glob._iterdir=_iterdir
-
-def _glob1(dirname, pattern, dir_fd, dironly=False):
-	"""
-		A modified version of glob._glob1 for the sake of both customization and optimization
-	"""
-	names = _iterdir(dirname, dir_fd, dironly)
-	if not glob._ishidden(pattern):
-		names = (x for x in names if not glob._ishidden(x))
-	for name in names:
-		if fnmatch.fnmatch(name, pattern):
-			verbose(f"Yielding \"{name}\"")
-			yield name
-		if runData["doneDir"]:
-			runData["doneDir"]=False
-			break
-glob._glob1=_glob1
-
-def _rlistdir(dirname, dir_fd, dironly=False):
-	"""
-		A modified version of glob._rlistdir for the sake of both customization and optimization
-	"""
-	names = glob._listdir(dirname, dir_fd, dironly)
-	for x in names:
-		if not glob._ishidden(x):
-			yield x
-			path = glob._join(dirname, x) if dirname else x
-			for y in _rlistdir(path, dir_fd, dironly):
-				yield glob._join(x, y)
-				if runData["doneDir"]:
-					runData["doneDir"]=False
-					break
-glob._rlistdir=_rlistdir
 
 # Helper functions
 def handleCount(rules, runData):
@@ -801,6 +682,7 @@ def sortDirFiles(names, dirname, key=None):
 	files=map(lambda name:{"name":os.path.join(dirname, name), "stdin":False}, names)
 	for file in sortFiles(files, key=key):
 		yield oa.path.relpath(file["name"], dirname)
+glob.sortDirFiles=sortDirFiles
 
 def fileContentsDontMatter():
 	"""
@@ -1232,67 +1114,6 @@ def funcPrintFailedFile(parsedArgs, file, runData, **kwargs):
 	"""
 	funcPrintName(parsedArgs, file, runData)
 
-# Keeping everything like this makes life easier
-# It's a mess but the alternative is worse
-runData={
-	"file": {
-		"printedName":False,
-
-		"totalMatches" :0,
-		"passedMatches":0,
-		"failedMatches":0,
-		"totalMatchesPerRegex" :[],
-		"passedMatchesPerRegex":[],
-		"failedMatchesPerRegex":[],
-	},
-	"dir":{
-		"printedName":False,
-
-		"totalFiles"  :0,
-		"passedFiles" :0,
-		"handledFiles":0,
-		"failedFiles" :0,
-		"totalFilesPerRegex"  :[],
-		"passedFilesPerRegex" :[],
-		"handledFilesPerRegex":[],
-		#"failedFilesPerRegex" :[],
-
-		"totalMatches" :0,
-		"passedMatches":0,
-		"failedMatches":0,
-		"totalMatchesPerRegex" :[],
-		"passedMatchesPerRegex":[],
-		"failedMatchesPerRegex":[],
-	},
-	"total":{
-		"totalDirs" :0,
-		"passedDirs":0,
-		"failedDirs":0,
-		"dirsPerRegex":[],
-
-		"totalFiles"  :0,
-		"passedFiles" :0,
-		"handledFiles":0,
-		"failedFiles" :0,
-		"totalFilesPerRegex"  :[],
-		"passedFilesPerRegex" :[],
-		"handledFilesPerRegex":[],
-		#"failedFilesPerRegex" :[],
-
-		"totalMatches" :0,
-		"passedMatches":0,
-		"failedMatches":0,
-		"totalMatchesPerRegex" :[],
-		"passedMatchesPerRegex":[],
-		"failedMatchesPerRegex":[],
-	},
-	"matchedStrings":set(),  # --no-duplicates handler
-	"filenames":[],
-	"currDir":None,
-	"lastDir":None,
-	"doneDir":False,
-}
-
 runData["total"]["dirsPerRegex"         ]=[0 for _ in parsedArgs.regex]
 runData["total"]["totalFilesPerRegex"   ]=[0 for _ in parsedArgs.regex]
 runData["total"]["passedFilesPerRegex"  ]=[0 for _ in parsedArgs.regex]
@@ -1330,254 +1151,258 @@ ofmt={
 	"countTotal"   : ("{cat} {subCat} (R{regexIndex}): "         *_header)+"{value}",
 }
 
-# The main file loop
-for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
-	verbose(f"Processing \"{file['name']}\"")
+def main():
+	# The main file loop
+	for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), start=1):
+		verbose(f"Processing \"{file['name']}\"")
+
+		if parsedArgs.print_rundata:
+			# Mainly for debugging. May expand upon later
+			print(ofmt["runData"].format(runData=json.dumps(runData)))
+
+		if file["isDir"] and not parsedArgs.include_dirs:
+			verbose(f"\"{file['name']}\" is a directory; Continuing")
+			continue
+
+		# Initialize runData["file"]
+		runData["file"]["passed"       ]=True
+		runData["file"]["printedName"  ]=False
+		runData["file"]["totalMatches" ]=0
+		runData["file"]["passedMatches"]=0
+		runData["file"]["failedMatches"]=0
+		runData["file"]["totalMatchesPerRegex" ]=[0 for x in parsedArgs.regex]
+		runData["file"]["passedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
+		runData["file"]["failedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
+
+		# Keep track of when new directories are entered
+		runData["lastDir"]=runData["currDir"]
+		runData["currDir"]=os.path.dirname(file["name"])
+
+		# Handle new directories
+		if runData["lastDir"]!=runData["currDir"]:
+			if runData["dir"]["passedFiles"]:
+				# Print data from last dir (--count)
+				if runData["lastDir"] is not None:
+					verbose("Just exited a directory")
+					handleCount(rules=["dir"], runData=runData)
+				# Handle --limit total-dir
+			if checkLimitCategory("td"):
+				verbose("Total directory limit reached; Exiting...")
+				break
+			runData["total"]["totalDirs"]+=1
+
+			# Initialize runData["dir"]
+			runData["dir"]["printedName"          ]=False
+			runData["dir"]["totalFiles"           ]=0
+			runData["dir"]["failedFiles"          ]=0
+			runData["dir"]["passedFiles"          ]=0
+			runData["dir"]["totalMatches"         ]=0
+			runData["dir"]["passedMatches"        ]=0
+			runData["dir"]["failedMatches"        ]=0
+			runData["dir"]["totalMatchesPerRegex" ]=[0 for x in parsedArgs.regex]
+			runData["dir"]["passedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
+			runData["dir"]["failedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
+			runData["dir"]["totalFilesPerRegex"   ]=[0 for x in parsedArgs.regex]
+			runData["dir"]["passedFilesPerRegex"  ]=[0 for x in parsedArgs.regex]
+			runData["dir"]["handledFilesPerRegex" ]=[0 for x in parsedArgs.regex]
+
+		runData["total"]["totalFiles"]+=1
+		runData["dir"  ]["totalFiles"]+=1
+
+		# Handle --name-regex stuff
+		nameRegexResult=filenameChecker(file)
+		if nameRegexResult is False:
+			verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched a fail regex; Continuing...")
+			runData["dir"  ]["failedFiles"]+=1
+			runData["total"]["failedFiles"]+=1
+			runData["file" ]["passed"     ]=False
+		elif nameRegexResult is None:
+			verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched an ignore regex; Continuing...")
+			runData["file"]["passed"]=False
+
+		# Handle --file-regex stuff
+		fileRegexResult=regexCheckerThing(
+			file["data"],
+			parsedArgs.file_regex,
+			parsedArgs.file_anti_regex,
+			partialIgnore=parsedArgs.file_ignore_regex
+		)
+		if fileRegexResult is False:
+			verbose(f"Contents of file \"{file['name']}\" (\"{os.path.realpath(file['name'])}\") matched a fail regex; Continuing...")
+			runData["dir"  ]["failedFiles"]+=1
+			runData["total"]["failedFiles"]+=1
+			runData["file" ]["passed"     ]=False
+		elif fileRegexResult is None:
+			verbose(f"Contents of file \"{file['name']}\" (\"{os.path.realpath(file['name'])}\") matched an ignore regex; Continuing...")
+			runData["file"]["passed"]=False
+
+		# Handle --dir-name-regex stuff
+		if runData["currDir"]!=runData["lastDir"]:
+			if runData["currDir"]=="":
+				dirRegexResult=True
+			else:
+				dirRegexResult=dirnameChecker(runData["currDir"])
+
+			if dirRegexResult is True:
+				runData["total"]["passedDirs"]+=1
+			elif dirRegexResult is False:
+				verbose(f"Contents of directory \"{runData['currDir']}\" (\"{os.path.realpath(runData['currDir'])}\") matched a fail regex; Continuing...")
+				runData["total"]["failedDirs"]+=1
+				runData["doneDir"]=True
+				runData["file"]["passed"]=False
+			elif dirRegexResult is None:
+				verbose(f"Contents of directory \"{runData['currDir']}\" (\"{os.path.realpath(runData['currDir'])}\") matched an ignore regex; Continuing...")
+				runData["doneDir"]=True
+				runData["file"]["passed"]=False
+
+		# Main matching stuff
+		matchIndex=0 # Just makes stuff easier
+
+		if runData["file"]["passed"]:
+			runData["dir"  ]["passedFiles"]+=1
+			runData["total"]["passedFiles"]+=1
+
+			# Handle printing file and dir names when there's no regexes
+			if not parsedArgs.regex:
+				runData["dir"  ]["handledFiles"]+=1
+				runData["total"]["handledFiles"]+=1
+				for func in parsedArgs.order:
+					if func=="print-name":
+						funcs["print-name"](parsedArgs, file, runData)
+					elif func=="print-dir-name":
+						funcs["print-dir-name"](parsedArgs, runData, runData["currDir"])
+					elif func=="no-name-duplicates":
+						try:
+							funcs["no-name-duplicates"](parsedArgs, file)
+						except NextFile:
+							break
+
+			# Handle regex matching and all that jazz
+			for regexIndex, regex in enumerate(parsedArgs.regex):
+				verbose(f"Handling regex {regexIndex}: {regex}")
+
+				runData["total"]["totalFilesPerRegex" ][regexIndex]+=1
+				runData["dir"  ]["totalFilesPerRegex" ][regexIndex]+=1
+				runData["total"]["passedFilesPerRegex"][regexIndex]+=1
+				runData["dir"  ]["passedFilesPerRegex"][regexIndex]+=1
+
+				# --weave-matches
+				if parsedArgs.weave_matches:
+					runData["file"]["matches"].append([])
+
+				try:
+					# Turn regex into bytes
+					regex=regex.encode(errors="ignore")
+
+					# Probably a bad idea, performance wise
+					if parsedArgs.string:
+						regex=re.escape(regex)
+
+					# Process matches
+					for matchIndex, match in enumerate(re.finditer(regex, file["data"]), start=1):
+						# Files/Dirs per regex
+						if matchIndex==1:
+							runData["dir"  ]["handledFilesPerRegex"][regexIndex]+=1
+							runData["total"]["handledFilesPerRegex"][regexIndex]+=1
+							if runData["lastDir"]!=runData["currDir"]:
+								runData["total"]["dirsPerRegex"][regexIndex]+=1
+							if regexIndex==0:
+								runData["dir"  ]["handledFiles"]+=1
+								runData["total"]["handledFiles"]+=1
+						# Match counting
+						runData["total"]["totalMatchesPerRegex"][regexIndex]+=1
+						runData["dir"  ]["totalMatchesPerRegex"][regexIndex]+=1
+						runData["file" ]["totalMatchesPerRegex"][regexIndex]+=1
+						runData["total"]["totalMatches"        ]            +=1
+						runData["dir"  ]["totalMatches"        ]            +=1
+						runData["file" ]["totalMatches"        ]            +=1
+
+						# Makes handling matches easier
+						match=JSObj({
+							0:match[0],
+							#**dict(enumerate(match.groups(), start=1)),
+							"groups":match.groups,
+							"span":match.span,
+							"re":match.re
+						})
+
+						# Handle matches
+						for func in parsedArgs.order:
+							try:
+								match=funcs[func](
+									regexIndex=regexIndex,
+									regex=regex,
+									file=file,
+									runData=runData,
+									parsedArgs=parsedArgs,
+									match=match,
+									currDir=runData["currDir"]
+								) or match
+							except NextMatch:
+								verbose("NextMatch")
+								break
+							except NextFile:
+								verbose("NextFile")
+								# TEMP SOLUTION
+								break
+						else:
+							verbose("Match handled to completion")
+							# Turns out for...else lets you run code when the loop isn't `break`ed out of
+							runData["total"]["passedMatches"        ]            +=1
+							runData["dir"  ]["passedMatches"        ]            +=1
+							runData["file" ]["passedMatches"        ]            +=1
+							runData["total"]["passedMatchesPerRegex"][regexIndex]+=1
+							runData["dir"  ]["passedMatchesPerRegex"][regexIndex]+=1
+							runData["file" ]["passedMatchesPerRegex"][regexIndex]+=1
+
+						# Handle --match-limit, --dir-match-limit, and --total-match-limit
+						if "m" not in noLimits and checkLimitType("m"):
+							break
+
+				except Exception as AAAAA:
+					warn(f"Cannot process \"{file['name']}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}", error=AAAAA)
+
+		if parsedArgs.print_failed_files and not runData["file"]["passed"]:
+			verbose(f"\"{file['name']}\" didn't match any file regexes, but --print-non-matching-files was specified")
+			funcPrintFailedFile(parsedArgs, file, runData)
+
+		if parsedArgs.weave_matches:
+			f=zip if parsedArgs.strict_weave else itertools.zip_longest
+			for matches in f(*runData["file"]["matches"]):
+				for regexIndex, match in enumerate(matches):
+					printMatch(match, regexIndex)
+
+		handleCount(rules=["file"], runData=runData)
+
+		# Hanlde --limit total-matches and total-files
+		if checkLimitCategory("tm"):
+			verbose("Total match limit reached; Exiting")
+			break
+		if checkLimitCategory("tf", filters="ptfh"):
+			verbose("Total file limit reached; Exiting")
+			break
+
+		# Handle --limit dir-files and dir-matches
+		# Really slow on big directories
+		# Might eventually have this hook into _iterdir using a global flag or something
+		if checkLimitCategory("df", filters="ptfh") or checkLimitCategory("dm"):
+			verbose("Dir limit(s) reached")
+			runData["doneDir"]=True
+
+	# --count dir-*
+	if runData["currDir"] is not None and runData["total"]["totalDirs"]:
+		# Only runs if files were handled in two or more directories
+		handleCount(rules=["dir"], runData=runData)
+
+	# --count total-*
+	handleCount(rules=["total"], runData=runData)
+
+	execHandler(parsedArgs.if_match_exec_after if runData["total"]["passedMatches"] else parsedArgs.if_no_match_exec_after)
+	execHandler(parsedArgs.if_file_exec_after  if runData["total"]["passedFiles"  ] else parsedArgs.if_no_file_exec_after )
+	execHandler(parsedArgs.if_dir_exec_after   if runData["total"]["passedDirs"   ] else parsedArgs.if_no_dir_exec_after  )
 
 	if parsedArgs.print_rundata:
-		# Mainly for debugging. May expand upon later
 		print(ofmt["runData"].format(runData=json.dumps(runData)))
 
-	if file["isDir"] and not parsedArgs.include_dirs:
-		verbose(f"\"{file['name']}\" is a directory; Continuing")
-		continue
-
-	# Initialize runData["file"]
-	runData["file"]["passed"       ]=True
-	runData["file"]["printedName"  ]=False
-	runData["file"]["totalMatches" ]=0
-	runData["file"]["passedMatches"]=0
-	runData["file"]["failedMatches"]=0
-	runData["file"]["totalMatchesPerRegex" ]=[0 for x in parsedArgs.regex]
-	runData["file"]["passedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
-	runData["file"]["failedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
-
-	# Keep track of when new directories are entered
-	runData["lastDir"]=runData["currDir"]
-	runData["currDir"]=os.path.dirname(file["name"])
-
-	# Handle new directories
-	if runData["lastDir"]!=runData["currDir"]:
-		if runData["dir"]["passedFiles"]:
-			# Print data from last dir (--count)
-			if runData["lastDir"] is not None:
-				verbose("Just exited a directory")
-				handleCount(rules=["dir"], runData=runData)
-			# Handle --limit total-dir
-		if checkLimitCategory("td"):
-			verbose("Total directory limit reached; Exiting...")
-			break
-		runData["total"]["totalDirs"]+=1
-
-		# Initialize runData["dir"]
-		runData["dir"]["printedName"          ]=False
-		runData["dir"]["totalFiles"           ]=0
-		runData["dir"]["failedFiles"          ]=0
-		runData["dir"]["passedFiles"          ]=0
-		runData["dir"]["totalMatches"         ]=0
-		runData["dir"]["passedMatches"        ]=0
-		runData["dir"]["failedMatches"        ]=0
-		runData["dir"]["totalMatchesPerRegex" ]=[0 for x in parsedArgs.regex]
-		runData["dir"]["passedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
-		runData["dir"]["failedMatchesPerRegex"]=[0 for x in parsedArgs.regex]
-		runData["dir"]["totalFilesPerRegex"   ]=[0 for x in parsedArgs.regex]
-		runData["dir"]["passedFilesPerRegex"  ]=[0 for x in parsedArgs.regex]
-		runData["dir"]["handledFilesPerRegex" ]=[0 for x in parsedArgs.regex]
-
-	runData["total"]["totalFiles"]+=1
-	runData["dir"  ]["totalFiles"]+=1
-
-	# Handle --name-regex stuff
-	nameRegexResult=filenameChecker(file)
-	if nameRegexResult is False:
-		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched a fail regex; Continuing...")
-		runData["dir"  ]["failedFiles"]+=1
-		runData["total"]["failedFiles"]+=1
-		runData["file" ]["passed"     ]=False
-	elif nameRegexResult is None:
-		verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched an ignore regex; Continuing...")
-		runData["file"]["passed"]=False
-
-	# Handle --file-regex stuff
-	fileRegexResult=regexCheckerThing(
-		file["data"],
-		parsedArgs.file_regex,
-		parsedArgs.file_anti_regex,
-		partialIgnore=parsedArgs.file_ignore_regex
-	)
-	if fileRegexResult is False:
-		verbose(f"Contents of file \"{file['name']}\" (\"{os.path.realpath(file['name'])}\") matched a fail regex; Continuing...")
-		runData["dir"  ]["failedFiles"]+=1
-		runData["total"]["failedFiles"]+=1
-		runData["file" ]["passed"     ]=False
-	elif fileRegexResult is None:
-		verbose(f"Contents of file \"{file['name']}\" (\"{os.path.realpath(file['name'])}\") matched an ignore regex; Continuing...")
-		runData["file"]["passed"]=False
-
-	# Handle --dir-name-regex stuff
-	if runData["currDir"]!=runData["lastDir"]:
-		if runData["currDir"]=="":
-			dirRegexResult=True
-		else:
-			dirRegexResult=dirnameChecker(runData["currDir"])
-
-		if dirRegexResult is True:
-			runData["total"]["passedDirs"]+=1
-		elif dirRegexResult is False:
-			verbose(f"Contents of directory \"{runData['currDir']}\" (\"{os.path.realpath(runData['currDir'])}\") matched a fail regex; Continuing...")
-			runData["total"]["failedDirs"]+=1
-			runData["doneDir"]=True
-			runData["file"]["passed"]=False
-		elif dirRegexResult is None:
-			verbose(f"Contents of directory \"{runData['currDir']}\" (\"{os.path.realpath(runData['currDir'])}\") matched an ignore regex; Continuing...")
-			runData["doneDir"]=True
-			runData["file"]["passed"]=False
-
-	# Main matching stuff
-	matchIndex=0 # Just makes stuff easier
-
-	if runData["file"]["passed"]:
-		runData["dir"  ]["passedFiles"]+=1
-		runData["total"]["passedFiles"]+=1
-
-		# Handle printing file and dir names when there's no regexes
-		if not parsedArgs.regex:
-			runData["dir"  ]["handledFiles"]+=1
-			runData["total"]["handledFiles"]+=1
-			for func in parsedArgs.order:
-				if func=="print-name":
-					funcs["print-name"](parsedArgs, file, runData)
-				elif func=="print-dir-name":
-					funcs["print-dir-name"](parsedArgs, runData, runData["currDir"])
-				elif func=="no-name-duplicates":
-					try:
-						funcs["no-name-duplicates"](parsedArgs, file)
-					except NextFile:
-						break
-
-		# Handle regex matching and all that jazz
-		for regexIndex, regex in enumerate(parsedArgs.regex):
-			verbose(f"Handling regex {regexIndex}: {regex}")
-
-			runData["total"]["totalFilesPerRegex" ][regexIndex]+=1
-			runData["dir"  ]["totalFilesPerRegex" ][regexIndex]+=1
-			runData["total"]["passedFilesPerRegex"][regexIndex]+=1
-			runData["dir"  ]["passedFilesPerRegex"][regexIndex]+=1
-
-			# --weave-matches
-			if parsedArgs.weave_matches:
-				runData["file"]["matches"].append([])
-
-			try:
-				# Turn regex into bytes
-				regex=regex.encode(errors="ignore")
-
-				# Probably a bad idea, performance wise
-				if parsedArgs.string:
-					regex=re.escape(regex)
-
-				# Process matches
-				for matchIndex, match in enumerate(re.finditer(regex, file["data"]), start=1):
-					# Files/Dirs per regex
-					if matchIndex==1:
-						runData["dir"  ]["handledFilesPerRegex"][regexIndex]+=1
-						runData["total"]["handledFilesPerRegex"][regexIndex]+=1
-						if runData["lastDir"]!=runData["currDir"]:
-							runData["total"]["dirsPerRegex"][regexIndex]+=1
-						if regexIndex==0:
-							runData["dir"  ]["handledFiles"]+=1
-							runData["total"]["handledFiles"]+=1
-					# Match counting
-					runData["total"]["totalMatchesPerRegex"][regexIndex]+=1
-					runData["dir"  ]["totalMatchesPerRegex"][regexIndex]+=1
-					runData["file" ]["totalMatchesPerRegex"][regexIndex]+=1
-					runData["total"]["totalMatches"        ]            +=1
-					runData["dir"  ]["totalMatches"        ]            +=1
-					runData["file" ]["totalMatches"        ]            +=1
-
-					# Makes handling matches easier
-					match=JSObj({
-						0:match[0],
-						#**dict(enumerate(match.groups(), start=1)),
-						"groups":match.groups,
-						"span":match.span,
-						"re":match.re
-					})
-
-					# Handle matches
-					for func in parsedArgs.order:
-						try:
-							match=funcs[func](
-								regexIndex=regexIndex,
-								regex=regex,
-								file=file,
-								runData=runData,
-								parsedArgs=parsedArgs,
-								match=match,
-								currDir=runData["currDir"]
-							) or match
-						except NextMatch:
-							verbose("NextMatch")
-							break
-						except NextFile:
-							verbose("NextFile")
-							# TEMP SOLUTION
-							break
-					else:
-						verbose("Match handled to completion")
-						# Turns out for...else lets you run code when the loop isn't `break`ed out of
-						runData["total"]["passedMatches"        ]            +=1
-						runData["dir"  ]["passedMatches"        ]            +=1
-						runData["file" ]["passedMatches"        ]            +=1
-						runData["total"]["passedMatchesPerRegex"][regexIndex]+=1
-						runData["dir"  ]["passedMatchesPerRegex"][regexIndex]+=1
-						runData["file" ]["passedMatchesPerRegex"][regexIndex]+=1
-
-					# Handle --match-limit, --dir-match-limit, and --total-match-limit
-					if "m" not in noLimits and checkLimitType("m"):
-						break
-
-			except Exception as AAAAA:
-				warn(f"Cannot process \"{file['name']}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}", error=AAAAA)
-
-	if parsedArgs.print_failed_files and not runData["file"]["passed"]:
-		verbose(f"\"{file['name']}\" didn't match any file regexes, but --print-non-matching-files was specified")
-		funcPrintFailedFile(parsedArgs, file, runData)
-
-	if parsedArgs.weave_matches:
-		f=zip if parsedArgs.strict_weave else itertools.zip_longest
-		for matches in f(*runData["file"]["matches"]):
-			for regexIndex, match in enumerate(matches):
-				printMatch(match, regexIndex)
-
-	handleCount(rules=["file"], runData=runData)
-
-	# Hanlde --limit total-matches and total-files
-	if checkLimitCategory("tm"):
-		verbose("Total match limit reached; Exiting")
-		break
-	if checkLimitCategory("tf", filters="ptfh"):
-		verbose("Total file limit reached; Exiting")
-		break
-
-	# Handle --limit dir-files and dir-matches
-	# Really slow on big directories
-	# Might eventually have this hook into _iterdir using a global flag or something
-	if checkLimitCategory("df", filters="ptfh") or checkLimitCategory("dm"):
-		verbose("Dir limit(s) reached")
-		runData["doneDir"]=True
-
-# --count dir-*
-if runData["currDir"] is not None and runData["total"]["totalDirs"]:
-	# Only runs if files were handled in two or more directories
-	handleCount(rules=["dir"], runData=runData)
-
-# --count total-*
-handleCount(rules=["total"], runData=runData)
-
-execHandler(parsedArgs.if_match_exec_after if runData["total"]["passedMatches"] else parsedArgs.if_no_match_exec_after)
-execHandler(parsedArgs.if_file_exec_after  if runData["total"]["passedFiles"  ] else parsedArgs.if_no_file_exec_after )
-execHandler(parsedArgs.if_dir_exec_after   if runData["total"]["passedDirs"   ] else parsedArgs.if_no_dir_exec_after  )
-
-if parsedArgs.print_rundata:
-	print(ofmt["runData"].format(runData=json.dumps(runData)))
+if __name__=="__main__":
+	main()
