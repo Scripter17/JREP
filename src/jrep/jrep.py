@@ -27,7 +27,8 @@ def warn(x, error=None):
 			raise error or Exception(f"No error provided (Message: \"{x}\")")
 		else:
 			calls=inspect.stack()[1:]
-			print(f"Waring on lines {', '.join([str(call[2]) for call in calls])} in functions {', '.join([str(call[3]) for call in calls])} : {x}", file=sys.stderr)
+			print(f"Warning on lines {', '.join([f'{call[3]}:{call[2]}' for call in calls])} : {x}", file=sys.stderr)
+			#print(f"Waring on lines {', '.join([str(call[2]) for call in calls])} in functions {', '.join([str(call[3]) for call in calls])} : {x}", file=sys.stderr)
 
 # Compatibility for old Python versions
 if not hasattr(functools, "cache"):
@@ -159,6 +160,10 @@ verbose(parsedArgs)
 if parsedArgs.enhanced_engine:
 	import regex as re
 	utils.re=re
+	# Wonky jank
+	from regex import regex
+	utils.enhancedEngine=True
+	utils._compile_replacement_helper=regex._compile_replacement_helper
 
 # Keeping everything like this makes life easier
 # It's a mess but the alternative is worse
@@ -243,10 +248,10 @@ ofmt={
 
 # Shove things into other modules
 # TODO: Fix this
-glob.sort_regex=parsedArgs.sort_regex
-glob.depth_first=parsedArgs.depth_first
-glob.sort_dir=parsedArgs.sort_dir
-glob.runData=runData
+# glob.sort_regex=parsedArgs.sort_regex
+# glob.depth_first=parsedArgs.depth_first
+# glob.sort_dir=parsedArgs.sort_dir
+# glob.runData=runData
 processors.ofmt=ofmt
 
 # Remove unneeded match handlers
@@ -267,7 +272,6 @@ if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedAr
 		"Error: Length of --replace must be either 1 or equal to the number of regexes",
 		error=ValueError("Error: Length of --replace must be either 1 or equal to the number of regexes")
 	)
-
 
 # Helper functions
 def handleCount(rules, runData):
@@ -325,40 +329,6 @@ def handleCount(rules, runData):
 				for regexIndex, value in enumerate(runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"]):
 					handleFiltereds(regexIndex, key)
 
-def _blockwiseSort(x, y):
-	"""
-		The main blockwise sort handler
-		This sort key mimics how the Windows file explorer places "abc10.txt" after "abc2.txt" but more generally
-		It first splits both x and y into chunks of integer substrings and non-integer substrings
-		"abc123def" -> ["abc", "123", "def"]
-		It then compares the Nth element of each list (a "blocK") as strings UNLESS both blocks are integers, in which case it compares them as integers
-		So while "2" is larger than "10", they'd be compared as 2 and 10 and would thus be sorted properly
-	"""
-	xblocks=re.findall(r"\d+|\D+", x) # "abc123def" -> ["abc", "123", "def"]
-	yblocks=re.findall(r"\d+|\D+", y)
-	for xblock, yblock in zip(xblocks, yblocks):
-		if (xblock+yblock).isdigit():
-			# Compare the blocks as ints
-			ret=int(xblock)-int(yblock)
-			if ret: return ret # An output of -53245 is treated the same as -1
-		else:
-			# Compare the blocks as strings
-			if xblock!=yblock:
-				return (xblock>yblock)-0.5
-	return 0
-
-@functools.cmp_to_key
-def blockwiseSort(x, y):
-	"""
-		Prevents the blockwise sort from splitting 123abc/def456 into ["123", "abc/def", "456"]
-	"""
-	xlist=x.replace("\\", "/").split("/")
-	ylist=y.replace("\\", "/").split("/")
-	for xitem, yitem in zip(xlist, ylist):
-		ret=_blockwiseSort(xitem, yitem)
-		if ret!=0: return ret
-	return len(xlist)-len(ylist)
-
 def fileContentsDontMatter():
 	"""
 		If file contents don't matter, tell getFiles to not even run open() on them
@@ -377,6 +347,7 @@ def getFiles():
 		Stdin always uses a bytes object
 		If the contents of a file are irrelevant (see: fileContentsDontMatter), b"" is always used instead of mmap
 	"""
+	globStuff=[runData, parsedArgs.sort_regex, parsedArgs.depth_first, parsedArgs.sort_dir]
 	def advancedGlob(pattern, recursive=False):
 		"""
 			A simple wrapper for glob.iglob that allows for using *:/ and ?:/ in glob patterns
@@ -384,9 +355,9 @@ def getFiles():
 		"""
 		if pattern.startswith("*:") or pattern.startswith("?:"):
 			for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-				yield from glob.iglob(letter+pattern[1:], recursive=recursive)
+				yield from glob.iglob(*globStuff, letter+pattern[1:], recursive=recursive)
 		else:
-			yield from glob.iglob(pattern, recursive=recursive)
+			yield from glob.iglob(*globStuff, pattern, recursive=recursive)
 
 	def _getFiles():
 		"""

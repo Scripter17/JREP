@@ -2,7 +2,10 @@ try:
 	import sre_parse
 except:
 	from . import sre_parse
-import re
+import re, os, fnmatch
+from . import sorts
+
+enhancedEngine=False
 
 class JSObj:
 	"""
@@ -36,6 +39,28 @@ class JSObj:
 
 	def keys(self): return self.obj.keys() # Makes **JSObj work
 
+def parseTemplate(repl, match):
+	# regex._compile_replacement_helper(regex.compile(r".(.)."), r"a\1b")
+	# ['a', 1, 'b']
+	# sre_parse.parse_template(r"a\1b", re.compile(".(.)."))
+	# ([(1, 1)], ['a', None, 'b'])
+	if enhancedEngine:
+		# I already have the code for handling sre_parse.parse_template
+		parsedTemplate=_compile_replacement_helper(regex.compile(match.re.pattern), repl)
+		ret=([], parsedTemplate)
+		for i, x in enumerate(parsedTemplate):
+			if isinstance(x, int):
+				ret[0].append((i, x))
+				ret[1][i]=None
+		return ret
+	else:
+		# parsedTemplate=sre_parse.parse_template(repl, match.re)
+		# ret=parsedTemplate[1]
+		# for index, group in parsedTemplate[0]:
+		# 	ret[index]=group
+		# return ret
+		return sre_parse.parse_template(repl, match.re)
+
 def delayedSub(repl, match):
 	"""
 		Use the secret sre_parse module to emulate re.sub with a re.Match object
@@ -61,23 +86,11 @@ def sortFiles(files, sortRegexes, key=None):
 	if key==None:
 		return files
 
-	sorts={
-		"ctime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_ctime,
-		"mtime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_mtime,
-		"atime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_atime,
-		"name"     : lambda x:x["name"],
-		"blockwise": lambda x:blockwiseSort(x["name"]),
-		"size"     : lambda x:len(x["data"]) if x["stdin"] else os.path.getsize(x["name"])
-	}
-	for sort in list(sorts.keys()):
-		# Scopes suck
-		sorts["r"+sort]=(lambda _sort:lambda x:-sorts[_sort](x))(sort)
-
 	if key in ["name", "blockwise", "rname", "rblockwise"] and sortRegexes:
 		for pattern, replace in zip(sortRegexes[0::2], sortRegexes[1::2]):
 			files=map(lambda file: {"orig":file["orig"] if "orig" in file else file, "name":re.sub(pattern, replace, file["name"])}, files)
 
-	return map(lambda x:x["orig"] if "orig" in x else x, sorted(files, key=sorts[key]))
+	return map(lambda x:x["orig"] if "orig" in x else x, sorted(files, key=sorts.sorts[key]))
 
 	#return sorted(files, key=sorts[key])
 

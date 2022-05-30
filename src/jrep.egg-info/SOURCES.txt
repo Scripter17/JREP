@@ -12,6 +12,7 @@ src/jrep/jrep.py
 src/jrep/modded_argparse.py
 src/jrep/modded_glob.py
 src/jrep/processors.py
+src/jrep/sorts.py
 src/jrep/sre_compile.py
 src/jrep/sre_constants.py
 src/jrep/sre_parse.py

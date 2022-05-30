@@ -1,0 +1,43 @@
+import re, functools
+
+blockwiseSplit=re.compile(r"\d+|\D+")
+def _blockwise(x, y):
+	"""
+		A windows-esque sort
+		0. Splits "twitter/account/account-1234-1.png" into ["twitter", "account", "account-1234-1-png"]
+		1. Splits "account-1234-1.png" into ["account-", "1234", "-", "1", ".png"]
+		2. Compares path parts blockwise
+		3. If the nth block is an int in both path parts, compare them as ints. Otherwise compare as strings
+		So "account-1234-1.png">"account-50-1.png" despite a string-based comparison sorting them the other way
+	"""
+	for xblock, yblock in zip(blockwiseSplit.findall(x), blockwiseSplit.findall(y)):
+		if (xblock+yblock).isdigit(): # .isdigit is additive (kinda. Functionally additive)
+			# Compare the blocks as ints
+			ret=int(xblock)-int(yblock)
+			if ret: return ret
+		elif xblock!=yblock:
+			# Compare the blocks as strings
+			return (xblock>yblock)-0.5 # bool-0.5 is a tiny bit faster than bool*2-1
+	return 0
+
+@functools.cmp_to_key
+def blockwise(x, y):
+	xlist=x.split("/")
+	ylist=y.split("/")
+	for xpart, ypart in zip(xlist, ylist):
+		ret=_blockwise(xpart, ypart)
+		if ret: return ret
+	return len(xlist)-len(ylist)
+
+sorts={
+	"ctime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_ctime,
+	"mtime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_mtime,
+	"atime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_atime,
+	"name"     : lambda x:x["name"],
+	"blockwise": lambda x:sorts.blockwiseSort(x["name"]),
+	"size"     : lambda x:len(x["data"]) if x["stdin"] else os.path.getsize(x["name"])
+}
+for sortKey, sortFunc in list(sorts.items()):
+	# Scopes suck
+	#sorts["r"+sort]=(lambda _sort:lambda x:-sorts[_sort](x))(sort)
+	sorts["r"+sortKey]=lambda x:-sortFunc(x)
