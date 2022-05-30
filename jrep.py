@@ -5,6 +5,94 @@ import os, sys, subprocess as sp, shutil
 import re, glob, fnmatch, json
 import mmap, itertools, functools, sre_parse, inspect
 
+try:
+	from sre_parse import parse_template
+except:
+	def parse_template(source, state):
+		# parse 're' replacement string into list of literals and
+		# group references
+		s = Tokenizer(source)
+		sget = s.get
+		groups = []
+		literals = []
+		literal = []
+		lappend = literal.append
+		def addgroup(index, pos):
+			if index > state.groups:
+				raise s.error("invalid group reference %d" % index, pos)
+			if literal:
+				literals.append(''.join(literal))
+				del literal[:]
+			groups.append((len(literals), index))
+			literals.append(None)
+		groupindex = state.groupindex
+		while True:
+			this = sget()
+			if this is None:
+				break # end of replacement string
+			if this[0] == "\\":
+				# group
+				c = this[1]
+				if c == "g":
+					name = ""
+					if not s.match("<"):
+						raise s.error("missing <")
+					name = s.getuntil(">", "group name")
+					if name.isidentifier():
+						try:
+							index = groupindex[name]
+						except KeyError:
+							raise IndexError("unknown group name %r" % name)
+					else:
+						try:
+							index = int(name)
+							if index < 0:
+								raise ValueError
+						except ValueError:
+							raise s.error("bad character in group name %r" % name,
+										  len(name) + 1) from None
+						if index >= MAXGROUPS:
+							raise s.error("invalid group reference %d" % index,
+										  len(name) + 1)
+					addgroup(index, len(name) + 1)
+				elif c == "0":
+					if s.next in OCTDIGITS:
+						this += sget()
+						if s.next in OCTDIGITS:
+							this += sget()
+					lappend(chr(int(this[1:], 8) & 0xff))
+				elif c in DIGITS:
+					isoctal = False
+					if s.next in DIGITS:
+						this += sget()
+						if (c in OCTDIGITS and this[2] in OCTDIGITS and
+							s.next in OCTDIGITS):
+							this += sget()
+							isoctal = True
+							c = int(this[1:], 8)
+							if c > 0o377:
+								raise s.error('octal escape value %s outside of '
+											  'range 0-0o377' % this, len(this))
+							lappend(chr(c))
+					if not isoctal:
+						addgroup(int(this[1:]), len(this) - 1)
+				else:
+					try:
+						this = chr(ESCAPES[this][1])
+					except KeyError:
+						if c in ASCIILETTERS:
+							raise s.error('bad escape %s' % this, len(this))
+					lappend(this)
+			else:
+				lappend(this)
+		if literal:
+			literals.append(''.join(literal))
+		if not isinstance(source, str):
+			# The tokenizer implicitly decodes bytes objects as latin-1, we must
+			# therefore re-encode the final representation.
+			literals = [None if s is None else s.encode('latin-1') for s in literals]
+		return groups, literals
+
 """
 	JREP - "Just Release mE Please (I've been in pre-alpha for 6 months)"
 	Made by Github@Scripter17 / Reddit@Scripter17 / Twitter@Scripter171
@@ -20,13 +108,13 @@ if not hasattr(functools, "cache"):
 	functools.cache=functools.lru_cache(maxsize=None)
 
 if not hasattr(glob, "_listdir"):
+	import contextlib
 	def _listdir(dirname, dir_fd, dironly):
 		"""
 			For Python 3.6 compatibility
 		"""
 		with contextlib.closing(_iterdir(dirname, dir_fd, dironly)) as it:
 			return list(it)
-	import contextlib
 	glob._listdir=_listdir
 
 if not hasattr(glob, "_join"):
@@ -754,7 +842,7 @@ def getFiles():
 		verbose("Yielding STDIN files")
 		# --stdin-files
 		if _STDIN and parsedArgs.stdin_files:
-			yield from _STDIN.splitlines()
+			yield from _STDIN.decode().splitlines()
 		# --file
 
 		verbose("Yielding files")
@@ -764,7 +852,7 @@ def getFiles():
 		verbose("Yielding STDIN globs")
 		# --stdin-globs
 		if not _STDIN and parsedArgs.stdin_globs:
-			for pattern in _STDIN.splitlines():
+			for pattern in _STDIN.decode().splitlines():
 				yield from advancedGlob(pattern, recursive=True)
 		# --glob
 		verbose("Yielding globs")
@@ -908,8 +996,10 @@ def delayedSub(repl, match):
 	"""
 		Use the secret sre_parse module to emulate re.sub with a re.Match object
 		Used exclusively for --replace
+		Python 3.11: sre_parse is removed, so I stole the function and put it at the top of this file
+		I really need to give up on the "JREP as a single file" dream
 	"""
-	parsedTemplate=sre_parse.parse_template(repl, match.re)
+	parsedTemplate=parse_template(repl, match.re)
 	groups=[match[0], *match.groups()]
 	for x in parsedTemplate[0]:
 		parsedTemplate[1][x[0]]=groups[x[1]]
@@ -921,7 +1011,6 @@ def delayedSub(repl, match):
 def funcReplace(parsedArgs, match, regexIndex, **kwargs):
 	"""
 		Handle --replace
-		Uses the secret sre_parse module to commit anti-Pythonic blasphemy
 	"""
 	replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
 	return delayedSub(replacement.encode(errors="ignore"), match)
@@ -989,6 +1078,7 @@ def funcMatchRegex(parsedArgs, runData, match, regexIndex, **kwargs):
 		Because yes. Filtering matches by using another regex is a feature I genuinely needed
 		Most features in JREP I have actually needed sometimes
 	"""
+	stdinThing=False
 	if parsedArgs.stdin_anti_match_strings and _STDIN:
 		stdinThing=match[0] in _STDIN.splitlines()
 	matchRegexResult=not stdinThing and regexCheckerThing(
@@ -1202,6 +1292,14 @@ runData={
 	"lastDir":None,
 	"doneDir":False,
 }
+
+runData["total"]["dirsPerRegex"         ]=[0 for _ in parsedArgs.regex]
+runData["total"]["totalFilesPerRegex"   ]=[0 for _ in parsedArgs.regex]
+runData["total"]["passedFilesPerRegex"  ]=[0 for _ in parsedArgs.regex]
+runData["total"]["handledFilesPerRegex" ]=[0 for _ in parsedArgs.regex]
+runData["total"]["totalMatchesPerRegex" ]=[0 for _ in parsedArgs.regex]
+runData["total"]["passedMatchesPerRegex"]=[0 for _ in parsedArgs.regex]
+runData["total"]["failedMatchesPerRegex"]=[0 for _ in parsedArgs.regex]
 
 funcs={
 	"print-dir-name"          : funcPrintDirName,
@@ -1419,11 +1517,14 @@ for fileIndex, file in enumerate(sortFiles(getFiles(), key=parsedArgs.sort), sta
 								currDir=runData["currDir"]
 							) or match
 						except NextMatch:
+							verbose("NextMatch")
 							break
 						except NextFile:
+							verbose("NextFile")
 							# TEMP SOLUTION
 							break
 					else:
+						verbose("Match handled to completion")
 						# Turns out for...else lets you run code when the loop isn't `break`ed out of
 						runData["total"]["passedMatches"        ]            +=1
 						runData["dir"  ]["passedMatches"        ]            +=1
