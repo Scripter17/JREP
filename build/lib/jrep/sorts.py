@@ -38,7 +38,7 @@ sorts={
 	"mtime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_mtime,
 	"atime"    : lambda x:float("inf") if x["stdin"] else os.stat(x["name"]).st_atime,
 	"name"     : lambda x:nameSort(x["name"]),
-	"blockwise": lambda x:blockwiseSort(x["name"]),
+	"blockwise": lambda x:blockwise(x["name"]),
 	"size"     : lambda x:len(x["data"]) if x["stdin"] else os.path.getsize(x["name"])
 }
 def makeRSort(sort):
