@@ -485,18 +485,6 @@ def checkLimit(sn):
 	value=getLimitValue(sn)
 	return value>=limit
 
-class NextMatch(Exception):
-	"""
-		Raised by funcMatchRegex and funcNoDuplicates when a match failes the match regex stuff
-	"""
-	pass
-
-class NextFile(Exception):
-	"""
-		Raised by funcNoNameDuplicates when a file name failes the name regex stuff
-	"""
-	pass
-
 def main():
 	# The main file loop
 	for fileIndex, file in enumerate(utils.sortFiles(getFiles(), parsedArgs.sort_regex, key=parsedArgs.sort), start=1):
@@ -620,7 +608,7 @@ def main():
 					elif func=="no-name-duplicates":
 						try:
 							processors.funcs["no-name-duplicates"](parsedArgs, file)
-						except NextFile:
+						except utils.NextFile:
 							break
 
 			# Handle regex matching and all that jazz
@@ -684,10 +672,10 @@ def main():
 									match=match,
 									currDir=runData["currDir"]
 								) or match
-							except NextMatch:
+							except utils.NextMatch:
 								verbose("NextMatch")
 								break
-							except NextFile:
+							except utils.NextFile:
 								verbose("NextFile")
 								# TEMP SOLUTION
 								break

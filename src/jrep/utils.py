@@ -39,6 +39,18 @@ class JSObj:
 
 	def keys(self): return self.obj.keys() # Makes **JSObj work
 
+class NextMatch(Exception):
+	"""
+		Raised by funcMatchRegex and funcNoDuplicates when a match failes the match regex stuff
+	"""
+	pass
+
+class NextFile(Exception):
+	"""
+		Raised by funcNoNameDuplicates when a file name failes the name regex stuff
+	"""
+	pass
+
 def parseTemplate(repl, match):
 	# regex._compile_replacement_helper(regex.compile(r".(.)."), r"a\1b")
 	# ['a', 1, 'b']

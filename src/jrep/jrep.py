@@ -461,15 +461,6 @@ def checkLimitCategory(sn, filters="ptf"):
 		noLimits.append(sn)
 	return False
 
-def getLimitValue(sn):
-	nameMap={"t":"total","d":"dir","f":"file","m":"match"}
-	typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
-	plural="e"*(sn[1]=="m")+"s"
-	try:
-		return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
-	except KeyError:
-		return 0
-
 def checkLimit(sn):
 	"""
 		Given an LCName's "short name" (total-files -> tf),
@@ -485,17 +476,14 @@ def checkLimit(sn):
 	value=getLimitValue(sn)
 	return value>=limit
 
-class NextMatch(Exception):
-	"""
-		Raised by funcMatchRegex and funcNoDuplicates when a match failes the match regex stuff
-	"""
-	pass
-
-class NextFile(Exception):
-	"""
-		Raised by funcNoNameDuplicates when a file name failes the name regex stuff
-	"""
-	pass
+def getLimitValue(sn):
+	nameMap={"t":"total","d":"dir","f":"file","m":"match"}
+	typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
+	plural="e"*(sn[1]=="m")+"s"
+	try:
+		return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
+	except KeyError:
+		return 0
 
 def main():
 	# The main file loop
@@ -620,7 +608,7 @@ def main():
 					elif func=="no-name-duplicates":
 						try:
 							processors.funcs["no-name-duplicates"](parsedArgs, file)
-						except NextFile:
+						except utils.NextFile:
 							break
 
 			# Handle regex matching and all that jazz
@@ -684,10 +672,10 @@ def main():
 									match=match,
 									currDir=runData["currDir"]
 								) or match
-							except NextMatch:
+							except utils.NextMatch:
 								verbose("NextMatch")
 								break
-							except NextFile:
+							except utils.NextFile:
 								verbose("NextFile")
 								# TEMP SOLUTION
 								break

@@ -39,7 +39,7 @@ def funcStdinAntiMatchStrings(parsedArgs, runData, match, **kwargs):
 		runData["total"]["failedMatchesPerRegex"][regexIndex]+=1
 		runData["dir"  ]["failedMatchesPerRegex"][regexIndex]+=1
 		runData["file" ]["failedMatchesPerRegex"][regexIndex]+=1
-		raise NextMatch()
+		raise utils.NextMatch()
 
 def funcMatchRegex(parsedArgs, runData, match, regexIndex, **kwargs):
 	"""
@@ -63,9 +63,9 @@ def funcMatchRegex(parsedArgs, runData, match, regexIndex, **kwargs):
 		runData["total"]["failedMatchesPerRegex"][regexIndex]+=1
 		runData["dir"  ]["failedMatchesPerRegex"][regexIndex]+=1
 		runData["file" ]["failedMatchesPerRegex"][regexIndex]+=1
-		raise NextMatch()
+		raise utils.NextMatch()
 	elif matchRegexResult is None:
-		raise NextMatch()
+		raise utils.NextMatch()
 
 def execHandler(cmd, arg=None):
 	"""
@@ -187,7 +187,7 @@ def funcNoDuplicates(parsedArgs, runData, match, **kwargs):
 		Handle --no-duplicates
 	"""
 	if match[0] in runData["matchedStrings"]:
-		raise NextMatch()
+		raise utils.NextMatch()
 	runData["matchedStrings"].add(match[0])
 
 def funcNoNameDuplicates(parsedArgs, runData, file, **kwargs):
@@ -195,7 +195,7 @@ def funcNoNameDuplicates(parsedArgs, runData, file, **kwargs):
 		Handle --no-name-duplicates
 	"""
 	if utils.processFileName(parsedArgs, file["name"]) in runData["filenames"]:
-		raise NextFile()
+		raise utils.NextFile()
 	runData["filenames"].append(utils.processFileName(parsedArgs, file["name"]))
 
 def funcPrintFailedFile(parsedArgs, runData, file, **kwargs):
