@@ -4,6 +4,8 @@ JREP is a general-purpose command line utility that takes the basic concept of G
 
 Basically I couldn't find a good GREP for windows and GREP itself kinda sucks so I did it myself. Excpect dumb bodges and messy code despite my efforts to keep both to a minimum.
 
+To install via PIP: [`pip install JREP`](https://pypi.org/project/JREP/)
+
 Check [here](#compatibility) for compatibility info
 
 The current output of `jrep --help`:  
