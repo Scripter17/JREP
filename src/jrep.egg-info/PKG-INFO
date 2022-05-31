@@ -18,6 +18,8 @@ JREP is a general-purpose command line utility that takes the basic concept of G
 
 Basically I couldn't find a good GREP for windows and GREP itself kinda sucks so I did it myself. Excpect dumb bodges and messy code despite my efforts to keep both to a minimum.
 
+To install via PIP: [`pip install JREP`](https://pypi.org/project/JREP/)
+
 Check [here](#compatibility) for compatibility info
 
 The current output of `jrep --help`:  
@@ -353,7 +355,7 @@ Usage looks like `--exec "echo {}"` or just `--exec "echo"`
 &nbsp;|Python 3.6|3.7|3.8|3.9|3.10
 |:-:|:-:|:-:|:-:|:-:|:-:|
 Windows 10  |? |? |? |? |Y 
-Ubuntu 20.04|? |? |Y?|? |? 
+Ubuntu 20.04|? |? |? |? |? 
 
 - I primarily develop JREP on a Windows 10 machine running Python 3.10
 - Due to how I override some internal stuff I'll need to test each version of python individually

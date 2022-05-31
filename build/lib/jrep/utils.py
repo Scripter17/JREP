@@ -2,7 +2,8 @@ try:
 	import sre_parse
 except:
 	from . import sre_parse
-import re, os, fnmatch
+import re, fnmatch
+import os, subprocess as sp
 from . import sorts
 
 enhancedEngine=False
@@ -239,3 +240,21 @@ def processDirName(parsedArgs, dname):
 	if parsedArgs.print_posix_paths: dname=dname.replace(b"\\", b"/")
 	dname=_funcSub(parsedArgs.dir_name_sub, dname, 1)
 	return dname
+
+def execHandler(cmd, arg=None):
+	"""
+		Handle the --exec family of options
+		sp.run(b"echo This doesn't work on Windows for some reason")
+	"""
+	if cmd is None:
+		return
+	if os.name=="nt":
+		# Windows moment :/
+		if isinstance(cmd, bytes): cmd=cmd.decode()
+		if isinstance(arg, bytes): arg=arg.decode()
+	if arg is not None:
+		if not isinstance(arg, list):
+			arg=[arg]
+		cmd=cmd.format(*arg)
+
+	sp.run(cmd, shell=True)

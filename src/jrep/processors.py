@@ -2,8 +2,9 @@
 	Functions for processing matches
 """
 
+from typing import *
 import sys
-from . import utils
+from . import utils, common
 
 def funcReplace(parsedArgs, runData, match, regexIndex, **kwargs):
 	"""
@@ -31,8 +32,8 @@ def funcMatchWholeLines(parsedArgs, runData, match, file, **kwargs):
 	match[0]=file["data"][lineStart+1:match.span()[0]]+match[0]+file["data"][match.span()[1]:lineEnd]
 	return match
 
-def funcStdinAntiMatchStrings(parsedArgs, runData, match, **kwargs):
-	if match[0] in _STDIN.splitlines():
+def funcStdinAntiMatchStrings(parsedArgs, runData, match, regexIndex, **kwargs):
+	if match[0] in utils.STDIN.splitlines():
 		runData["total"]["failedMatches"        ]            +=1
 		runData["dir"  ]["failedMatches"        ]            +=1
 		runData["file" ]["failedMatches"        ]            +=1
@@ -48,8 +49,8 @@ def funcMatchRegex(parsedArgs, runData, match, regexIndex, **kwargs):
 		Most features in JREP I have actually needed sometimes
 	"""
 	stdinThing=False
-	if parsedArgs.stdin_anti_match_strings and _STDIN:
-		stdinThing=match[0] in _STDIN.splitlines()
+	if parsedArgs.stdin_anti_match_strings and utils.STDIN:
+		stdinThing=match[0] in utils.STDIN.splitlines()
 	matchRegexResult=not stdinThing and utils.regexCheckerThing(
 		match[0],
 		              parsedArgs.match_regex       [regexIndex] if parsedArgs.match_regex        else [],
@@ -67,24 +68,6 @@ def funcMatchRegex(parsedArgs, runData, match, regexIndex, **kwargs):
 	elif matchRegexResult is None:
 		raise utils.NextMatch()
 
-def execHandler(cmd, arg=None):
-	"""
-		Handle the --exec family of options
-		sp.run(b"echo This doesn't work on Windows for some reason")
-	"""
-	if cmd is None:
-		return
-	if os.name=="nt":
-		# Windows moment :/
-		if isinstance(cmd, bytes): cmd=cmd.decode()
-		if isinstance(arg, bytes): arg=arg.decode()
-	if arg is not None:
-		if not isinstance(arg, list):
-			arg=[arg]
-		cmd=cmd.format(*arg)
-
-	sp.run(cmd, shell=True)
-
 def funcPrintDirName(parsedArgs, runData, currDir, **kwargs):
 	"""
 		Handle --print-directories
@@ -94,16 +77,16 @@ def funcPrintDirName(parsedArgs, runData, currDir, **kwargs):
 
 	if parsedArgs.if_dir_exec_before is not None:
 		# --if-dir-exec-before
-		execHandler(parsedArgs.if_dir_exec_before)
+		utils.execHandler(parsedArgs.if_dir_exec_before)
 		parsedArgs.if_dir_exec_before=None
 
 	pDirName=utils.processDirName(parsedArgs, currDir)
 	if parsedArgs.pre_dir_exec is not None:
 		# --pre-dir-exec
-		execHandler(parsedArgs.pre_dir_exec, pDirName)
+		utils.execHandler(parsedArgs.pre_dir_exec, pDirName)
 
 	if parsedArgs.print_dir_names:
-		sys.stdout.buffer.write(ofmt["dname"]+pDirName)
+		sys.stdout.buffer.write(common.ofmt["dname"]+pDirName)
 		sys.stdout.buffer.write(b"\n")
 		if runData["flushSTDOUT"]:
 			sys.stdout.buffer.flush()
@@ -111,7 +94,7 @@ def funcPrintDirName(parsedArgs, runData, currDir, **kwargs):
 
 	if parsedArgs.dir_exec is not None:
 		# --dir-exec
-		execHandler(parsedArgs.dir_exec, pDirName)
+		utils.execHandler(parsedArgs.dir_exec, pDirName)
 
 def funcPrintName(parsedArgs, runData, file, **kwargs):
 	"""
@@ -122,16 +105,16 @@ def funcPrintName(parsedArgs, runData, file, **kwargs):
 
 	if parsedArgs.if_file_exec_before is not None:
 		# --if-file-exec-before
-		execHandler(parsedArgs.if_file_exec_before)
+		utils.execHandler(parsedArgs.if_file_exec_before)
 		parsedArgs.if_file_exec_before=None
 
 	pFileName=utils.processFileName(parsedArgs, file["name"])
 	if parsedArgs.pre_file_exec is not None:
 		# --pre-file-exec
-		execHandler(parsedArgs.pre_file_exec, pFileName)
+		utils.execHandler(parsedArgs.pre_file_exec, pFileName)
 
 	if parsedArgs.print_file_names:
-		sys.stdout.buffer.write(ofmt["fname"]+pFileName)
+		sys.stdout.buffer.write(common.ofmt["fname"]+pFileName)
 		sys.stdout.buffer.write(b"\n")
 		if runData["flushSTDOUT"]:
 			sys.stdout.buffer.flush()
@@ -140,7 +123,7 @@ def funcPrintName(parsedArgs, runData, file, **kwargs):
 	if parsedArgs.file_exec is not None:
 		# --file-exec
 
-		execHandler(parsedArgs.file_exec, pFileName)
+		utils.execHandler(parsedArgs.file_exec, pFileName)
 
 def printMatch(parsedArgs, runData, match, regexIndex):
 	"""
@@ -152,15 +135,15 @@ def printMatch(parsedArgs, runData, match, regexIndex):
 
 	if parsedArgs.if_match_exec_before is not None:
 		# --if-match-exec-before
-		execHandler(parsedArgs.if_match_exec_before)
+		utils.execHandler(parsedArgs.if_match_exec_before)
 		parsedArgs.if_match_exec_before=None
 
 	if parsedArgs.pre_match_exec is not None:
 		# --pre-match-exec
-		execHandler(parsedArgs.pre_match_exec, match[0])
+		utils.execHandler(parsedArgs.pre_match_exec, match[0])
 
 	if not parsedArgs.dont_print_matches:
-		sys.stdout.buffer.write(ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
+		sys.stdout.buffer.write(common.ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
 		out=match[0]
 		if parsedArgs.escape:
 			utils.escape(match[0])
@@ -171,7 +154,7 @@ def printMatch(parsedArgs, runData, match, regexIndex):
 
 	if parsedArgs.match_exec is not None:
 		# --match-exec
-		execHandler(parsedArgs.match_exec, match[0])
+		utils.execHandler(parsedArgs.match_exec, match[0])
 
 def funcPrintMatch(parsedArgs, runData, file, regexIndex, match, **kwargs):
 	"""
@@ -202,7 +185,7 @@ def funcPrintFailedFile(parsedArgs, runData, file, **kwargs):
 	"""
 		Print filename of failed file if --print-non-matching-files is specified
 	"""
-	funcPrintName(parsedArgs, runData, file, runData)
+	funcPrintName(parsedArgs, runData, file)
 
 funcs={
 	"replace"                 : funcReplace,

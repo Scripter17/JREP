@@ -1,11 +1,12 @@
 try:
 	import sre_parse
 except:
-	from . import sre_parse
-import re, os, fnmatch
-from . import sorts
+	from . import sre_parse # type: ignore
+import re, fnmatch
+import os, subprocess as sp, sys
+from . import sorts, common
 
-enhancedEngine=False
+_compile_replacement_helper=None # type: ignore
 
 class JSObj:
 	"""
@@ -56,9 +57,9 @@ def parseTemplate(repl, match):
 	# ['a', 1, 'b']
 	# sre_parse.parse_template(r"a\1b", re.compile(".(.)."))
 	# ([(1, 1)], ['a', None, 'b'])
-	if enhancedEngine:
+	if common.enhancedEngine:
 		# I already have the code for handling sre_parse.parse_template
-		parsedTemplate=_compile_replacement_helper(regex.compile(match.re.pattern), repl)
+		parsedTemplate=_compile_replacement_helper(common.regex.compile(match.re.pattern), repl) # type: ignore
 		ret=([], parsedTemplate)
 		for i, x in enumerate(parsedTemplate):
 			if isinstance(x, int):
@@ -100,7 +101,7 @@ def sortFiles(files, sortRegexes, key=None):
 
 	if key in ["name", "blockwise", "rname", "rblockwise"] and sortRegexes:
 		for pattern, replace in zip(sortRegexes[0::2], sortRegexes[1::2]):
-			files=map({"orig":file["orig"] if "orig" in file else file, "name":re.sub(pattern, replace, file["name"])}, files)
+			files=map(lambda file: {"orig":file["orig"] if "orig" in file else file, "name":re.sub(pattern, replace, file["name"])}, files)
 	return map(lambda x:x["orig"] if "orig" in x else x, sorted(files, key=sorts.sorts[key]))
 
 	#return sorted(files, key=sorts[key])
@@ -239,3 +240,25 @@ def processDirName(parsedArgs, dname):
 	if parsedArgs.print_posix_paths: dname=dname.replace(b"\\", b"/")
 	dname=_funcSub(parsedArgs.dir_name_sub, dname, 1)
 	return dname
+
+def execHandler(cmd, arg=None):
+	"""
+		Handle the --exec family of options
+		sp.run(b"echo This doesn't work on Windows for some reason")
+	"""
+	if cmd is None:
+		return
+	# if os.name=="nt":
+	# 	# Windows moment :/
+	# 	if isinstance(cmd, bytes): cmd=cmd.decode()
+	# 	if isinstance(arg, bytes): arg=arg.decode()
+	if arg is not None:
+		if not isinstance(arg, list):
+			arg=[arg]
+		cmd=cmd.format(*arg)
+
+	sp.run(cmd, shell=True)
+
+STDIN=b""
+if not os.isatty(sys.stdin.fileno()): # type: ignore[attr-defined]
+	STDIN=sys.stdin.buffer.read()

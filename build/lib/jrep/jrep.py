@@ -245,13 +245,6 @@ ofmt={
 	"countFiltered": ("{filter} {cat} {subCat} (R{regexIndex}): "*_header)+"{count}",
 	"countTotal"   : ("{cat} {subCat} (R{regexIndex}): "         *_header)+"{value}",
 }
-
-# Shove things into other modules
-# TODO: Fix this
-# glob.sort_regex=parsedArgs.sort_regex
-# glob.depth_first=parsedArgs.depth_first
-# glob.sort_dir=parsedArgs.sort_dir
-# glob.runData=runData
 processors.ofmt=ofmt
 
 # Remove unneeded match handlers
@@ -461,15 +454,6 @@ def checkLimitCategory(sn, filters="ptf"):
 		noLimits.append(sn)
 	return False
 
-def getLimitValue(sn):
-	nameMap={"t":"total","d":"dir","f":"file","m":"match"}
-	typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
-	plural="e"*(sn[1]=="m")+"s"
-	try:
-		return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
-	except KeyError:
-		return 0
-
 def checkLimit(sn):
 	"""
 		Given an LCName's "short name" (total-files -> tf),
@@ -484,6 +468,15 @@ def checkLimit(sn):
 		return None
 	value=getLimitValue(sn)
 	return value>=limit
+
+def getLimitValue(sn):
+	nameMap={"t":"total","d":"dir","f":"file","m":"match"}
+	typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
+	plural="e"*(sn[1]=="m")+"s"
+	try:
+		return runData[nameMap[sn[0]]][typeMap[sn[2]]+nameMap[sn[1]].title()+plural]
+	except KeyError:
+		return 0
 
 def main():
 	# The main file loop
@@ -717,8 +710,6 @@ def main():
 			break
 
 		# Handle --limit dir-files and dir-matches
-		# Really slow on big directories
-		# Might eventually have this hook into _iterdir using a global flag or something
 		if checkLimitCategory("df", filters="ptfh") or checkLimitCategory("dm"):
 			verbose("Dir limit(s) reached")
 			runData["doneDir"]=True
@@ -731,9 +722,9 @@ def main():
 	# --count total-*
 	handleCount(rules=["total"], runData=runData)
 
-	processors.execHandler(parsedArgs.if_match_exec_after if runData["total"]["passedMatches"] else parsedArgs.if_no_match_exec_after)
-	processors.execHandler(parsedArgs.if_file_exec_after  if runData["total"]["passedFiles"  ] else parsedArgs.if_no_file_exec_after )
-	processors.execHandler(parsedArgs.if_dir_exec_after   if runData["total"]["passedDirs"   ] else parsedArgs.if_no_dir_exec_after  )
+	utils.execHandler(parsedArgs.if_match_exec_after if runData["total"]["passedMatches"] else parsedArgs.if_no_match_exec_after)
+	utils.execHandler(parsedArgs.if_file_exec_after  if runData["total"]["passedFiles"  ] else parsedArgs.if_no_file_exec_after )
+	utils.execHandler(parsedArgs.if_dir_exec_after   if runData["total"]["passedDirs"   ] else parsedArgs.if_no_dir_exec_after  )
 
 	if parsedArgs.print_rundata:
 		print(ofmt["runData"].format(runData=json.dumps(runData)))
