@@ -77,13 +77,13 @@ def funcPrintDirName(parsedArgs, runData, currDir, **kwargs):
 
 	if parsedArgs.if_dir_exec_before is not None:
 		# --if-dir-exec-before
-		utils.execHandler(parsedArgs.if_dir_exec_before)
+		utils.execHandler(parsedArgs, parsedArgs.if_dir_exec_before)
 		parsedArgs.if_dir_exec_before=None
 
 	pDirName=utils.processDirName(parsedArgs, currDir)
 	if parsedArgs.pre_dir_exec is not None:
 		# --pre-dir-exec
-		utils.execHandler(parsedArgs.pre_dir_exec, pDirName)
+		utils.execHandler(parsedArgs, parsedArgs.pre_dir_exec, pDirName)
 
 	if parsedArgs.print_dir_names:
 		sys.stdout.buffer.write(common.ofmt["dname"]+pDirName)
@@ -94,7 +94,7 @@ def funcPrintDirName(parsedArgs, runData, currDir, **kwargs):
 
 	if parsedArgs.dir_exec is not None:
 		# --dir-exec
-		utils.execHandler(parsedArgs.dir_exec, pDirName)
+		utils.execHandler(parsedArgs, parsedArgs.dir_exec, pDirName)
 
 def funcPrintName(parsedArgs, runData, file, **kwargs):
 	"""
@@ -123,7 +123,7 @@ def funcPrintName(parsedArgs, runData, file, **kwargs):
 	if parsedArgs.file_exec is not None:
 		# --file-exec
 
-		utils.execHandler(parsedArgs.file_exec, pFileName)
+		utils.execHandler(parsedArgs, .file_exec, pFileName)
 
 def printMatch(parsedArgs, runData, match, regexIndex):
 	"""
@@ -135,12 +135,12 @@ def printMatch(parsedArgs, runData, match, regexIndex):
 
 	if parsedArgs.if_match_exec_before is not None:
 		# --if-match-exec-before
-		utils.execHandler(parsedArgs.if_match_exec_before)
+		utils.execHandler(parsedArgs, parsedArgs.if_match_exec_before)
 		parsedArgs.if_match_exec_before=None
 
 	if parsedArgs.pre_match_exec is not None:
 		# --pre-match-exec
-		utils.execHandler(parsedArgs.pre_match_exec, match[0])
+		utils.execHandler(parsedArgs, parsedArgs.pre_match_exec, match[0])
 
 	if not parsedArgs.dont_print_matches:
 		sys.stdout.buffer.write(common.ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
@@ -154,7 +154,7 @@ def printMatch(parsedArgs, runData, match, regexIndex):
 
 	if parsedArgs.match_exec is not None:
 		# --match-exec
-		utils.execHandler(parsedArgs.match_exec, match[0])
+		utils.execHandler(parsedArgs, parsedArgs.match_exec, match[0])
 
 def funcPrintMatch(parsedArgs, runData, file, regexIndex, match, **kwargs):
 	"""

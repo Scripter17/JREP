@@ -101,7 +101,7 @@ def sortFiles(files, sortRegexes, key=None):
 
 	if key in ["name", "blockwise", "rname", "rblockwise"] and sortRegexes:
 		for pattern, replace in zip(sortRegexes[0::2], sortRegexes[1::2]):
-			files=map(lambda file: {"orig":file["orig"] if "orig" in file else file, "name":re.sub(pattern, replace, file["name"])}, files)
+			files=map(lambda file: {"orig":file["orig"] if "orig" in file else file, "name":pattern.sub(replace, file["name"])}, files)
 	return map(lambda x:x["orig"] if "orig" in x else x, sorted(files, key=sorts.sorts[key]))
 
 	#return sorted(files, key=sorts[key])
@@ -134,14 +134,14 @@ def regexCheckerThing(partial, partialPass, partialFail, full="", fullPass=[], f
 		False = Failed
 		None  = Ignored
 	"""
-	if (partialIgnore and any(map(lambda x:re.search(x, partial), partialIgnore))) or\
-	   (fullIgnore    and any(map(lambda x:re.search(x, full   ), fullIgnore   ))):
+	if (partialIgnore and any(map(lambda x:x.search(partial), partialIgnore))) or\
+	   (fullIgnore    and any(map(lambda x:x.search(full   ), fullIgnore   ))):
 		return None
-	if (partialFail and any(map(lambda x:re.search(x, partial), partialFail))) or\
-	   (fullFail    and any(map(lambda x:re.search(x, full   ), fullFail   ))):
+	if (partialFail and any(map(lambda x:x.search(partial), partialFail))) or\
+	   (fullFail    and any(map(lambda x:x.search(full   ), fullFail   ))):
 		return False
-	if all(map(lambda x:re.search(x, partial), partialPass)) and\
-	   all(map(lambda x:re.search(x, full   ), fullPass   )):
+	if all(map(lambda x:x.search(partial), partialPass)) and\
+	   all(map(lambda x:x.search(full   ), fullPass   )):
 		return True
 	return False
 
@@ -162,7 +162,7 @@ def globCheckerThing(partial, partialPass, partialFail, full="", fullPass=[], fu
 		return True
 	return False
 
-def filenameChecker(file, parsedArgs):
+def filenameChecker(parsedArgs, file):
 	"""
 		Shorthand for handling filenames with regexCheckerThing
 	"""
@@ -190,7 +190,7 @@ def filenameChecker(file, parsedArgs):
 	if None  in [r,g]: return None
 	return True
 
-def dirnameChecker(dirname, parsedArgs):
+def dirnameChecker(parsedArgs, dirname):
 	return regexCheckerThing(
 		dirname,
 		parsedArgs.dir_name_regex,
@@ -215,7 +215,7 @@ def _funcSub(subRules, match, regexIndex, wrap=True, **kwargs):
 			for group in subRules[regexIndex]:
 				if regexCheckerThing(match, group["tests"], group["antiTests"]):
 					for pattern, repl in zip(group["patterns"], group["repls"]):
-						match=re.sub(pattern, repl, match)
+						match=pattern.sub(repl, match)
 	return match
 
 def processFileName(parsedArgs, fname):
@@ -241,12 +241,12 @@ def processDirName(parsedArgs, dname):
 	dname=_funcSub(parsedArgs.dir_name_sub, dname, 1)
 	return dname
 
-def execHandler(cmd, arg=None):
+def execHandler(parsedArgs, cmd, arg=None):
 	"""
 		Handle the --exec family of options
 		sp.run(b"echo This doesn't work on Windows for some reason")
 	"""
-	if cmd is None:
+	if cmd is None or parsedArgs.no_exec:
 		return
 	# if os.name=="nt":
 	# 	# Windows moment :/

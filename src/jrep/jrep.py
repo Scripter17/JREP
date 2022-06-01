@@ -14,8 +14,12 @@
 import os, sys, subprocess as sp, shutil
 import re, fnmatch, json
 import mmap, itertools, functools, inspect
-# Included with JREP
-from . import modded_glob as glob, modded_argparse, processors, utils, common # type: ignore[attr-defined]
+_re=re
+try:
+	import regex
+except:
+	regex=None
+from . import modded_glob as glob, modded_argparse, processors, utils, common
 
 def verbose(x):
 	if parsedArgs.verbose:
@@ -34,8 +38,8 @@ def warn(x, error=None):
 if not hasattr(functools, "cache"):
 	functools.cache=functools.lru_cache(maxsize=None)
 
-parser=modded_argparse.CustomArgumentParser(formatter_class=modded_argparse.CustomHelpFormatter, add_help=False) # type: ignore[attr-defined]
-parser.add_argument("--help", "-h", nargs="?", default=modded_argparse.SUPPRESS, action=modded_argparse.CustomHelpAction, metavar="topic", help="show this help message and exit OR use `--help [topic]` for help with [topic]") # type: ignore[attr-defined]
+parser=modded_argparse.CustomArgumentParser(formatter_class=modded_argparse.CustomHelpFormatter, add_help=False)
+parser.add_argument("--help", "-h", nargs="?", default=modded_argparse.SUPPRESS, action=modded_argparse.CustomHelpAction, metavar="topic", help="show this help message and exit OR use `--help [topic]` for help with [topic]")
 
 _group=parser.add_argument_group("Files and regexes")
 _group.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", help="Regex(es) to process matches for (reffered to as \"get regexes\")")
@@ -77,18 +81,18 @@ _group.add_argument("--dir-full-name-regex"       ,       nargs="+", default=[],
 _group.add_argument("--dir-full-name-anti-regex"  ,       nargs="+", default=[], metavar="Regex", help="Like --dir-name-anti-regex but applied to full directory paths")
 _group.add_argument("--dir-full-name-ignore-regex",       nargs="+", default=[], metavar="Regex", help="Like --dir-full-name-anti-regex but doesn't contribute to --count total-failed-dirs")
 parser.add_line()
-_group.add_argument("--file-regex"                ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.FileRegexAction, help="Regexes to test file contents for") # type: ignore[attr-defined]
-_group.add_argument("--file-anti-regex"           ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.FileRegexAction, help="Like --file-regex but excludes files that match of the supplied regexes") # type: ignore[attr-defined]
-_group.add_argument("--file-ignore-regex"         ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.FileRegexAction, help="Like --file-anti-regex but doesn't contribute to --count *-failed-files") # type: ignore[attr-defined]
+_group.add_argument("--file-regex"                ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.FileRegexAction, help="Regexes to test file contents for")
+_group.add_argument("--file-anti-regex"           ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.FileRegexAction, help="Like --file-regex but excludes files that match of the supplied regexes")
+_group.add_argument("--file-ignore-regex"         ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.FileRegexAction, help="Like --file-anti-regex but doesn't contribute to --count *-failed-files")
 parser.add_line()
-_group.add_argument("--match-regex"               ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.MatchRegexAction, help="Groups are split along lone *. Matches from the Nth get regex are tested with the Nth group") # type: ignore[attr-defined]
-_group.add_argument("--match-anti-regex"          ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.MatchRegexAction, help="Like --match-regex but excludes matches that match any of the supplied regexes") # type: ignore[attr-defined]
-_group.add_argument("--match-ignore-regex"        ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.MatchRegexAction, help="Like --match-anti-regex but doesn't contribute to --count *-failed-matches") # type: ignore[attr-defined]
+_group.add_argument("--match-regex"               ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.MatchRegexAction, help="Groups are split along lone *. Matches from the Nth get regex are tested with the Nth group")
+_group.add_argument("--match-anti-regex"          ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.MatchRegexAction, help="Like --match-regex but excludes matches that match any of the supplied regexes")
+_group.add_argument("--match-ignore-regex"        ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.MatchRegexAction, help="Like --match-anti-regex but doesn't contribute to --count *-failed-matches")
 
 _group=parser.add_argument_group("Sorting")
 _group.add_argument("--sort"                      , "-S",                                         help="Sort files by ctime, mtime, atime, name, or size. Prefix key with \"r\" to reverse. A windows-esque \"blockwise\" sort is also available. Run jrep --help blockwise for more info")
-_group.add_argument("--sort-regex"                ,       nargs="+", default=[], metavar="Regex", help="Regexes to apply to file names keys (like --replace) for purposes of sorting (EXPERIMENTAL)")
 _group.add_argument("--sort-dir"                  ,                                               help="--sort on a per-directory basis")
+_group.add_argument("--sort-regex"                ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.SortRegexAction, help="Regexes to apply to file names keys (like --replace) for purposes of sorting (EXPERIMENTAL)")
 
 _group=parser.add_argument_group("Output")
 _group.add_argument("--no-headers"                , "-H", action="store_true"                   , help="Don't print match: or file: before lines")
@@ -103,14 +107,14 @@ _group.add_argument("--print-match-range"         , "-O", action="store_true"   
 
 _group=parser.add_argument_group("Replace/Sub")
 _group.add_argument("--replace"                   , "-r", nargs="+", default=[], metavar="Regex", help="Regex replacement")
-_group.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=modded_argparse.SubRegexAction, help="re.sub argument pairs after --replace is applied. Run jrep.py --help sub for more info") # type: ignore[attr-defined]
-_group.add_argument("--name-sub"                  ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.SubRegexAction, help="Applies --sub to file names. A lone * separates subsitutions for y/z and C:/x/y/z") # type: ignore[attr-defined]
-_group.add_argument("--dir-name-sub"              ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.SubRegexAction, help="--name-sub but for directory names") # type: ignore[attr-defined]
+_group.add_argument("--sub"                       , "-R", nargs="+", default=[], metavar="Regex", action=modded_argparse.SubRegexAction, help="re.sub argument pairs after --replace is applied. Run jrep.py --help sub for more info")
+_group.add_argument("--name-sub"                  ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.SubRegexAction, help="Applies --sub to file names. A lone * separates subsitutions for y/z and C:/x/y/z")
+_group.add_argument("--dir-name-sub"              ,       nargs="+", default=[], metavar="Regex", action=modded_argparse.SubRegexAction, help="--name-sub but for directory names")
 _group.add_argument("--escape"                    , "-e", action="store_true"                   , help="Escape back slashes, newlines, carriage returns, and non-printable characters")
 
 _group=parser.add_argument_group("Misc.")
-_group.add_argument("--count"                     , "-c", nargs="+", default=[]                  , action=modded_argparse.CountAction , help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)") # type: ignore[attr-defined]
-_group.add_argument("--limit"                     , "-l", nargs="+", default=utils.JSObj({}, default=0), action=modded_argparse.LimitAction , help="Limit match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)") # type: ignore[attr-defined]
+_group.add_argument("--count"                     , "-c", nargs="+", default=[]                  , action=modded_argparse.CountAction , help="Count match/file/dir per file, dir, and/or total (Ex: --count fm dir-files)")
+_group.add_argument("--limit"                     , "-l", nargs="+", default=utils.JSObj({}, default=0), action=modded_argparse.LimitAction , help="Limit match/file/dir per file, dir, and/or total (Ex: --limit filematch=1 total_dirs=5)")
 parser.add_line()
 _group.add_argument("--depth-first"               ,       action="store_true"                      , help="Enter subdirectories before processing files")
 _group.add_argument("--glob-root-dir"             ,                                                  help="Root dir to run globs in (JANK)")
@@ -124,6 +128,8 @@ _group.add_argument("--weave-matches"             , "-w", action="store_true"   
 _group.add_argument("--strict-weave"              , "-W", action="store_true"                      , help="Only print full weave sets")
 
 _group=parser.add_argument_group("Exec")
+_group.add_argument("--no-exec"                   ,       action="store_true"                      , help="Don't run any exec functions. Useful if using user input (STILL NOT SAFE)")
+parser.add_line()
 _group.add_argument("--pre-match-exec"            ,                                   metavar="cmd", help="Command to run before printing each match")
 _group.add_argument("--match-exec"                ,                                   metavar="cmd", help="Command to run after  printing each match")
 _group.add_argument("--if-match-exec-before"      ,                                   metavar="cmd", help="Command to run as soon as least one match passes")
@@ -152,96 +158,6 @@ parsedArgs=parser.parse_args()
 
 verbose(parsedArgs)
 common.init(parsedArgs)
-
-
-# Handle --enhanced-engine
-if parsedArgs.enhanced_engine:
-	import regex as re # type: ignore
-	utils.re=re # type: ignore
-
-# Keeping everything like this makes life easier
-# It's a mess but the alternative is worse
-runData={
-	"file": {
-		"printedName":False,
-
-		"totalMatches" :0,
-		"passedMatches":0,
-		"failedMatches":0,
-		"totalMatchesPerRegex" :[],
-		"passedMatchesPerRegex":[],
-		"failedMatchesPerRegex":[],
-	},
-	"dir":{
-		"printedName":False,
-
-		"totalFiles"  :0,
-		"passedFiles" :0,
-		"handledFiles":0,
-		"failedFiles" :0,
-		"totalFilesPerRegex"  :[],
-		"passedFilesPerRegex" :[],
-		"handledFilesPerRegex":[],
-		#"failedFilesPerRegex" :[],
-
-		"totalMatches" :0,
-		"passedMatches":0,
-		"failedMatches":0,
-		"totalMatchesPerRegex" :[],
-		"passedMatchesPerRegex":[],
-		"failedMatchesPerRegex":[],
-	},
-	"total":{
-		"totalDirs" :0,
-		"passedDirs":0,
-		"failedDirs":0,
-		"dirsPerRegex":[0 for _ in parsedArgs.regex],
-
-		"totalFiles"  :0,
-		"passedFiles" :0,
-		"handledFiles":0,
-		"failedFiles" :0,
-		"totalFilesPerRegex"  :[0 for _ in parsedArgs.regex],
-		"passedFilesPerRegex" :[0 for _ in parsedArgs.regex],
-		"handledFilesPerRegex":[0 for _ in parsedArgs.regex],
-		#"failedFilesPerRegex" :[],
-
-		"totalMatches" :0,
-		"passedMatches":0,
-		"failedMatches":0,
-		"totalMatchesPerRegex" :[0 for _ in parsedArgs.regex],
-		"passedMatchesPerRegex":[0 for _ in parsedArgs.regex],
-		"failedMatchesPerRegex":[0 for _ in parsedArgs.regex],
-	},
-	"matchedStrings":set(),  # --no-duplicates handler
-	"filenames":[],
-	"currDir":None,
-	"lastDir":None,
-	"doneDir":False,
-	"flushSTDOUT":True,
-}
-# Decide whether or not to flush STDOUT after pritning matches/names/dirs
-if (parsedArgs.no_flush or not os.isatty(sys.stdout.fileno())) and not parsedArgs.force_flush: # type: ignore[attr-defined]
-	runData["flushSTDOUT"]=False
-
-# Remove unneeded match handlers
-def orderRemove(x):
-	if x in parsedArgs.order:
-		parsedArgs.order.remove(x)
-if not parsedArgs.replace                 : orderRemove("replace")
-if not parsedArgs.match_whole_lines       : orderRemove("match-whole-lines")
-if not parsedArgs.sub                     : orderRemove("sub")
-if not parsedArgs.stdin_anti_match_strings: orderRemove("stdin-anti-match-strings")
-if not parsedArgs.match_regex and not parsedArgs.match_anti_regex and not parsedArgs.match_ignore_regex: orderRemove("match-regex")
-if not parsedArgs.no_name_duplicates      : orderRemove("no-name-duplicates")
-if not parsedArgs.no_duplicates           : orderRemove("no-duplicates")
-
-# Verify --replace
-if not (len(parsedArgs.replace)==0 or len(parsedArgs.replace)==1 or len(parsedArgs.replace)==len(parsedArgs.regex)):
-	warn(
-		"Error: Length of --replace must be either 1 or equal to the number of regexes",
-		error=ValueError("Error: Length of --replace must be either 1 or equal to the number of regexes")
-	)
 
 # Helper functions
 def handleCount(rules, runData):
@@ -309,7 +225,7 @@ def fileContentsDontMatter():
 	       not any(map(lambda x:re.search(r"[tdf]m", x), parsedArgs.limit.keys())) and\
 	       not any(map(lambda x:re.search(r"^[tdf]m(([pf]c)?[tr])?$", x), parsedArgs.count))
 
-def getFiles():
+def getFiles(parsedArgs, runData):
 	"""
 		Yields files selected with --file and --glob
 		Stdin has a filename of -
@@ -325,9 +241,9 @@ def getFiles():
 		"""
 		if pattern.startswith("*:") or pattern.startswith("?:"):
 			for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-				yield from glob.iglob(*globStuff, letter+pattern[1:], recursive=recursive) # type: ignore[attr-defined]
+				yield from glob.iglob(*globStuff, letter+pattern[1:], recursive=recursive)
 		else:
-			yield from glob.iglob(*globStuff, pattern, recursive=recursive) # type: ignore[attr-defined]
+			yield from glob.iglob(*globStuff, pattern, recursive=recursive)
 
 	def _getFiles():
 		"""
@@ -358,7 +274,7 @@ def getFiles():
 			yield from advancedGlob(pattern, recursive=True)
 
 	# Add stdin as a file
-	if not os.isatty(sys.stdin.fileno()) and not parsedArgs.stdin_files and not parsedArgs.stdin_globs: # type: ignore[attr-defined]
+	if not os.isatty(sys.stdin.fileno()) and not parsedArgs.stdin_files and not parsedArgs.stdin_globs:
 		verbose("Processing STDIN")
 		yield {"name":"-", "basename":"-", "relDir":"", "absDir":"", "data":utils.STDIN, "isDir": False, "stdin": True}
 
@@ -455,9 +371,98 @@ def getLimitValue(sn):
 	except KeyError:
 		return 0
 
-def main():
+def main(parsedArgs=None):
+	if parsedArgs is None          : parsedArgs=parser.parse_args()
+	if isinstance(parsedArgs, list): parsedArgs=parser.parse_args(parsedArgs)
+	if isinstance(parsedArgs, modded_argparse.argparse.Namespace): parsedArgs=dict(parsedArgs._get_kwargs())
+	if isinstance(parsedArgs, dict): parsedArgs=utils.JSObj(parsedArgs)
+	# Handle --enhanced-engine
+	if parsedArgs.enhanced_engine:
+		if regex is None:
+			raise ModuleNotFoundError("Third party module 'regex' isn't available")
+		re=regex
+	else:
+		re=_re
+
+	# Keeping everything like this makes life easier
+	# It's a mess but the alternative is worse
+	runData={
+		"file": {
+			"printedName":False,
+
+			"totalMatches" :0,
+			"passedMatches":0,
+			"failedMatches":0,
+			"totalMatchesPerRegex" :[],
+			"passedMatchesPerRegex":[],
+			"failedMatchesPerRegex":[],
+		},
+		"dir":{
+			"printedName":False,
+
+			"totalFiles"  :0,
+			"passedFiles" :0,
+			"handledFiles":0,
+			"failedFiles" :0,
+			"totalFilesPerRegex"  :[],
+			"passedFilesPerRegex" :[],
+			"handledFilesPerRegex":[],
+			#"failedFilesPerRegex" :[],
+
+			"totalMatches" :0,
+			"passedMatches":0,
+			"failedMatches":0,
+			"totalMatchesPerRegex" :[],
+			"passedMatchesPerRegex":[],
+			"failedMatchesPerRegex":[],
+		},
+		"total":{
+			"totalDirs" :0,
+			"passedDirs":0,
+			"failedDirs":0,
+			"dirsPerRegex":[0 for _ in parsedArgs.regex],
+
+			"totalFiles"  :0,
+			"passedFiles" :0,
+			"handledFiles":0,
+			"failedFiles" :0,
+			"totalFilesPerRegex"  :[0 for _ in parsedArgs.regex],
+			"passedFilesPerRegex" :[0 for _ in parsedArgs.regex],
+			"handledFilesPerRegex":[0 for _ in parsedArgs.regex],
+			#"failedFilesPerRegex" :[],
+
+			"totalMatches" :0,
+			"passedMatches":0,
+			"failedMatches":0,
+			"totalMatchesPerRegex" :[0 for _ in parsedArgs.regex],
+			"passedMatchesPerRegex":[0 for _ in parsedArgs.regex],
+			"failedMatchesPerRegex":[0 for _ in parsedArgs.regex],
+		},
+		"matchedStrings":set(),  # --no-duplicates handler
+		"filenames":[],
+		"currDir":None,
+		"lastDir":None,
+		"doneDir":False,
+		"flushSTDOUT":True,
+	}
+	# Decide whether or not to flush STDOUT after pritning matches/names/dirs
+	if (parsedArgs.no_flush or not os.isatty(sys.stdout.fileno())) and not parsedArgs.force_flush:
+		runData["flushSTDOUT"]=False
+
+	# Remove unneeded match handlers
+	def orderRemove(parsedArgs, x):
+		if x in parsedArgs.order:
+			parsedArgs.order.remove(x)
+	if not parsedArgs.replace                 : orderRemove(parsedArgs, "replace")
+	if not parsedArgs.match_whole_lines       : orderRemove(parsedArgs, "match-whole-lines")
+	if not parsedArgs.sub                     : orderRemove(parsedArgs, "sub")
+	if not parsedArgs.stdin_anti_match_strings: orderRemove(parsedArgs, "stdin-anti-match-strings")
+	if not parsedArgs.match_regex and not parsedArgs.match_anti_regex and not parsedArgs.match_ignore_regex: orderRemove(parsedArgs, "match-regex")
+	if not parsedArgs.no_name_duplicates      : orderRemove(parsedArgs, "no-name-duplicates")
+	if not parsedArgs.no_duplicates           : orderRemove(parsedArgs, "no-duplicates")
+
 	# The main file loop
-	for fileIndex, file in enumerate(utils.sortFiles(getFiles(), parsedArgs.sort_regex, key=parsedArgs.sort), start=1):
+	for fileIndex, file in enumerate(utils.sortFiles(getFiles(parsedArgs, runData), parsedArgs.sort_regex, key=parsedArgs.sort), start=1):
 		verbose(f"Processing \"{file['name']}\"")
 
 		if parsedArgs.print_rundata:
@@ -514,7 +519,7 @@ def main():
 		runData["dir"  ]["totalFiles"]+=1
 
 		# Handle --name-regex stuff
-		nameRegexResult=utils.filenameChecker(file, parsedArgs)
+		nameRegexResult=utils.filenameChecker(parsedArgs, file)
 		if nameRegexResult is False:
 			verbose(f"File name \"{file['name']}\" or file path \"{os.path.realpath(file['name'])}\" matched a fail regex; Continuing...")
 			runData["dir"  ]["failedFiles"]+=1
@@ -554,10 +559,10 @@ def main():
 				runData["total"]["failedDirs"]+=1
 				runData["doneDir"]=True
 				runData["file"]["passed"]=False
-			elif dirRegexResult is None: # type: ignore[unreachable]
-				verbose(f"Contents of directory \"{runData['currDir']}\" (\"{os.path.realpath(runData['currDir'])}\") matched an ignore regex; Continuing...") # type: ignore[unreachable]
-				runData["doneDir"]=True # type: ignore[unreachable]
-				runData["file"]["passed"]=False # type: ignore[unreachable]
+			elif dirRegexResult is None:
+				verbose(f"Contents of directory \"{runData['currDir']}\" (\"{os.path.realpath(runData['currDir'])}\") matched an ignore regex; Continuing...")
+				runData["doneDir"]=True
+				runData["file"]["passed"]=False
 
 		# Main matching stuff
 		matchIndex=0 # Just makes stuff easier
@@ -640,7 +645,8 @@ def main():
 									runData=runData,
 									parsedArgs=parsedArgs,
 									match=match,
-									currDir=runData["currDir"]
+									currDir=runData["currDir"],
+									re=re
 								) or match
 							except utils.NextMatch:
 								verbose("NextMatch")
@@ -664,7 +670,7 @@ def main():
 							break
 
 				except Exception as AAAAA:
-					warn(f"Cannot process \"{file['name']}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}", error=AAAAA) # type: ignore
+					warn(f"Cannot process \"{file['name']}\" because of \"{AAAAA}\" on line {sys.exc_info()[2].tb_lineno}", error=AAAAA)
 
 		if parsedArgs.print_failed_files and not runData["file"]["passed"]:
 			verbose(f"\"{file['name']}\" didn't match any file regexes, but --print-non-matching-files was specified")
@@ -699,9 +705,9 @@ def main():
 	# --count total-*
 	handleCount(rules=["total"], runData=runData)
 
-	utils.execHandler(parsedArgs.if_match_exec_after if runData["total"]["passedMatches"] else parsedArgs.if_no_match_exec_after)
-	utils.execHandler(parsedArgs.if_file_exec_after  if runData["total"]["passedFiles"  ] else parsedArgs.if_no_file_exec_after )
-	utils.execHandler(parsedArgs.if_dir_exec_after   if runData["total"]["passedDirs"   ] else parsedArgs.if_no_dir_exec_after  )
+	utils.execHandler(parsedArgs, parsedArgs.if_match_exec_after if runData["total"]["passedMatches"] else parsedArgs.if_no_match_exec_after)
+	utils.execHandler(parsedArgs, parsedArgs.if_file_exec_after  if runData["total"]["passedFiles"  ] else parsedArgs.if_no_file_exec_after )
+	utils.execHandler(parsedArgs, parsedArgs.if_dir_exec_after   if runData["total"]["passedDirs"   ] else parsedArgs.if_no_dir_exec_after  )
 
 	if parsedArgs.print_rundata:
 		print(common.ofmt["runData"].format(runData=json.dumps(runData)))

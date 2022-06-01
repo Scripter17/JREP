@@ -58,6 +58,12 @@ for topic in _extendedHelp:
 	else:
 		_extendedHelp[topic]=_extendedHelp[topic].replace("`", "").replace("\t", "  ")
 
+def getRegexModule(namespace):
+	if namespace.enhanced_engine:
+		import regex
+		return regex
+	return re
+
 def parseLCName(name):
 	name=name.replace("-", "_")
 	if len(name)==2:
@@ -102,7 +108,8 @@ class MatchRegexAction(argparse.Action):
 		An argument of just * means that the following arguments should be applied to the next parsedArgs.regex
 	"""
 	def __call__(self, parser, namespace, values, option_string):
-		setattr(namespace, self.dest, listSplit(map(lambda x:x.encode(), values), "*"))
+		re=getRegexModule(namespace)
+		setattr(namespace, self.dest, listSplit(map(lambda x:re.comile(x.encode()), values), "*"))
 
 class SubRegexAction(argparse.Action):
 	"""
@@ -114,6 +121,7 @@ class SubRegexAction(argparse.Action):
 		If a match from get regex 1 does't match /t/, replace e with d
 	"""
 	def __call__(self, parser, namespace, values, option_string):
+		re=getRegexModule(namespace)
 		ret=[]
 		for regexGroup in listSplit(values, "*"):
 			ret.append([])
@@ -122,10 +130,10 @@ class SubRegexAction(argparse.Action):
 				thingParts=listSplit(subSets, "?")
 				if   len(thingParts)==1: thingParts=[[],            [], thingParts[0]]
 				elif len(thingParts)==2: thingParts=[thingParts[0], [], thingParts[1]]
-				parsed["tests"    ]=[x.encode() for x in thingParts[0]      ]
-				parsed["antiTests"]=[x.encode() for x in thingParts[1]      ]
-				parsed["patterns" ]=[x.encode() for x in thingParts[2][0::2]] # Even elems
-				parsed["repls"    ]=[x.encode() for x in thingParts[2][1::2]] # Odd  elems
+				parsed["tests"    ]=[           x.encode()  for x in thingParts[0]      ]
+				parsed["antiTests"]=[           x.encode()  for x in thingParts[1]      ]
+				parsed["patterns" ]=[re.compile(x.encode()) for x in thingParts[2][0::2]] # Even elems
+				parsed["repls"    ]=[           x.encode()  for x in thingParts[2][1::2]] # Odd  elems
 				ret[-1].append(parsed)
 		setattr(namespace, self.dest, ret)
 
@@ -134,7 +142,16 @@ class FileRegexAction(argparse.Action):
 		Pre-processor for --file-regex stuff
 	"""
 	def __call__(self, parser, namespace, values, option_string):
-		setattr(namespace, self.dest, [x.encode() for x in values])
+		re=getRegexModule(namespace)
+		setattr(namespace, self.dest, [re.comile(x.encode()) for x in values])
+
+class SortRegexAction(argparse.Action):
+	"""
+		Pre-processor for --sort-regex
+	"""
+	def __call__(self, parser, namespace, values, option_string):
+		re=getRegexModule(namespace)
+		setattr(namespace, self.dest, [re.comile(x) if i%2==1 else x for i,x in enumerate(values)])
 
 class CustomArgumentParser(argparse.ArgumentParser):
 	"""

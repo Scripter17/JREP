@@ -10,23 +10,20 @@ def _blockwise(x, y):
 		3. If the nth block is an int in both path parts, compare them as ints. Otherwise compare as strings
 		So "account-1234-1.png">"account-50-1.png" despite a string-based comparison sorting them the other way
 	"""
-	for xblock, yblock in zip(blockwiseSplit.findall(x), blockwiseSplit.findall(y)):
-		if (xblock+yblock).isdigit(): # .isdigit is additive (kinda. Functionally additive)
-			# Compare the blocks as ints
-			ret=int(xblock)-int(yblock)
-			if ret: return ret
-		elif xblock!=yblock:
-			# Compare the blocks as strings
-			return (xblock>yblock)-0.5 # bool-0.5 is a tiny bit faster than bool*2-1
-	return 0
+	if x and y and x[0].isdigit()==y[0].isdigit():
+		for xblock, yblock in zip(blockwiseSplit.findall(x), blockwiseSplit.findall(y)):
+			if xblock!=yblock:
+				if xblock[0].isdigit(): return int(xblock)-int(yblock)
+				return (xblock>yblock)-0.5
+	return (x>y)-(x<y)
 
 @functools.cmp_to_key
 def blockwise(x, y):
 	xlist=x.split("/")
 	ylist=y.split("/")
 	for xpart, ypart in zip(xlist, ylist):
-		ret=_blockwise(xpart, ypart)
-		if ret: return ret
+		if (ret:=_blockwise3(xpart, ypart)):
+			return ret
 	return len(xlist)-len(ylist)
 
 @functools.cmp_to_key
