@@ -22,7 +22,8 @@ def blockwise(x, y):
 	xlist=x.split("/")
 	ylist=y.split("/")
 	for xpart, ypart in zip(xlist, ylist):
-		if (ret:=_blockwise3(xpart, ypart)):
+		ret=_blockwise(xpart, ypart)
+		if ret:
 			return ret
 	return len(xlist)-len(ylist)
 

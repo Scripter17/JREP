@@ -1,5 +1,5 @@
 import argparse, os, shutil, re
-from . import processors
+from . import processors, utils
 
 SUPPRESS=argparse.SUPPRESS
 

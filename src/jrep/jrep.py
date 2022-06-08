@@ -386,9 +386,8 @@ def main(parsedArgs=None, returnData=False, returnJSON=False, stdout=sys.stdout.
 	if parsedArgs.json: returnJSON=True
 	if returnJSON     : returnData=True
 	if stdout is None : stdout=open(os.devnull, "wb")
-	if returnData:
-		_stdout=stdout
-		stdout=open(os.devnull, "wb")
+	_stdout=stdout
+	if returnData: stdout=open(os.devnull, "wb")
 	STDIN=None
 	if not isinstance(stdin, bool):
 		STDIN=stdin
