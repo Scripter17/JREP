@@ -1,4 +1,4 @@
-import subprocess as sp, jrep.jrep
+import jrep.jrep
 
 tests=[
 	{
@@ -33,13 +33,14 @@ def matchReplacement(struct, pattern):
 	else:
 		return pattern is ... or struct==pattern
 
-
 def test_matching():
 	assert matchReplacement({"a":[1,2,3], "b":[2]}, {"a":[...,2], "b":[...]})
 	assert matchReplacement(2, 3) is False
 	assert matchReplacement(2, 2)
 
 def test_JREP():
+	print(dir(jrep.jrep))
+	print(type(jrep.jrep.main), inspect.getmembers(jrep.jrep.main))
 	for test in tests:
 		result=jrep.jrep.main(test["args"], returnJSON=True)
 		assert matchReplacement(result, test["pattern"])

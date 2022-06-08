@@ -370,7 +370,6 @@ def getLimitValue(runData, sn):
 	except KeyError:
 		return 0
 
-import json
 def main(parsedArgs=None, returnData=False, returnJSON=False, stdout=sys.stdout.buffer, stdin=True):
 	if parsedArgs is None          : parsedArgs=parser.parse_args()
 	if isinstance(parsedArgs, list): parsedArgs=parser.parse_args(parsedArgs)
