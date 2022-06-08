@@ -1,4 +1,4 @@
-import subprocess as sp, jrep
+import subprocess as sp, jrep.jrep
 
 tests=[
 	{
@@ -41,5 +41,5 @@ def test_matching():
 
 def test_JREP():
 	for test in tests:
-		result=jrep.main(test["args"], returnJSON=True)
+		result=jrep.jrep.main(test["args"], returnJSON=True)
 		assert matchReplacement(result, test["pattern"])

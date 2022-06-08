@@ -1,1 +1,1 @@
-from .jrep import main
+from .jrep import *
