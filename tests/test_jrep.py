@@ -23,12 +23,15 @@ def matchReplacement(struct, pattern):
 				return False
 			if matchReplacement(struct[x], pattern[x]) is False:
 				return False
+		return True
 	elif isinstance(struct, list) and isinstance(pattern, list):
 		for x,y in zip(struct, pattern):
-			if pattern is not ...:
+			if y is not ...:
 				if matchReplacement(x, y) is False:
 					return False
-	return pattern is ... or struct==pattern
+		return True
+	else:
+		return pattern is ... or struct==pattern
 
 
 def test_matching():
