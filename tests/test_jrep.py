@@ -1,4 +1,4 @@
-import jrep.jrep
+import jrep.jrep, inspect
 
 tests=[
 	{
