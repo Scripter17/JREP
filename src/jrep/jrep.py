@@ -21,8 +21,6 @@ except:
 	_regex=None
 from . import modded_glob as glob, modded_argparse, processors, utils
 
-__ALL__=["main"]
-
 def verbose(x):
 	# if parsedArgs.verbose:
 	# 	caller=inspect.stack()[1]
