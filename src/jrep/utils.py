@@ -1,23 +1,28 @@
 try:
 	import sre_parse
 except:
-	from . import sre_parse # type: ignore
-import re, fnmatch
+	# Python 3.11 removes the built-in sre_parse
+	# So I'm shipping my own
+	# No guarantees on it always being unmodified, btw
+	from . import sre_parse
+import re, fnmatch, json
 import os, subprocess as sp, sys
-from . import sorts, common
+try:
+	from regex.regex import _compile_replacement_helper
+except:
+	_compile_replacement_helper=None
+from . import sorts
 
-_compile_replacement_helper=None # type: ignore
-
-class JSObj:
+class JSObj(dict):
 	"""
 		[J]ava[S]cript [Obj]ects
 		JavaScript allows both {"a":1}.a and {"a":1}["a"]
 		This class mimicks that to make mutilating re.Match objects easier
 	"""
 	def __init__(self, obj, default=None, defaultFactory=None):
-		object.__setattr__(self, "obj"            , obj)
 		object.__setattr__(self, "default"        , default)
 		object.__setattr__(self, "_defaultFactory", defaultFactory)
+		super().__init__(obj)
 
 	def defaultFactory(self, key):
 		if self._defaultFactory is None:
@@ -30,15 +35,13 @@ class JSObj:
 	def __repr__(self):
 		return f"JSObj({self.obj})"
 
-	def __getattr__(self, key):      return self.obj[key] if key in self.obj else self.defaultFactory(key)
-	def __setattr__(self, key, val):        self.obj[key]=val
-	def __delattr__(self, key):      del    self.obj[key]
+	def __getitem__(self, key):      return super().__getitem__(key) if key in self else self.defaultFactory(key)
 
-	def __getitem__(self, key):      return self.obj[key] if key in self.obj else self.defaultFactory(key)
-	def __setitem__(self, key, val):        self.obj[key]=val
-	def __delitem__(self, key):      del    self.obj[key]
+	def __getattr__(self, key):      return self[key] if key in self else self.defaultFactory(key)
+	def __setattr__(self, key, val):        self[key]=val
+	def __delattr__(self, key):      del    self[key]
 
-	def keys(self): return self.obj.keys() # Makes **JSObj work
+	def keys(self): return super().keys() # Makes **JSObj work
 
 class NextMatch(Exception):
 	"""
@@ -52,14 +55,14 @@ class NextFile(Exception):
 	"""
 	pass
 
-def parseTemplate(repl, match):
+def parseTemplate(repl, match, enhancedEngine):
 	# regex._compile_replacement_helper(regex.compile(r".(.)."), r"a\1b")
 	# ['a', 1, 'b']
 	# sre_parse.parse_template(r"a\1b", re.compile(".(.)."))
 	# ([(1, 1)], ['a', None, 'b'])
-	if common.enhancedEngine:
+	if enhancedEngine:
 		# I already have the code for handling sre_parse.parse_template
-		parsedTemplate=_compile_replacement_helper(common.regex.compile(match.re.pattern), repl) # type: ignore
+		parsedTemplate=_compile_replacement_helper(match.re, repl) # type: ignore
 		ret=([], parsedTemplate)
 		for i, x in enumerate(parsedTemplate):
 			if isinstance(x, int):
@@ -81,7 +84,7 @@ def delayedSub(repl, match):
 		Python 3.11: sre_parse is removed, so I stole the function and put it at the top of this file
 		I really need to give up on the "JREP as a single file" dream
 	"""
-	parsedTemplate=sre_parse.parse_template(repl, match.re)
+	parsedTemplate=parseTemplate(repl, match.re)
 	groups=[match[0], *match.groups()]
 	for x in parsedTemplate[0]:
 		parsedTemplate[1][x[0]]=groups[x[1]]
@@ -259,6 +262,32 @@ def execHandler(parsedArgs, cmd, arg=None):
 
 	sp.run(cmd, shell=True)
 
-STDIN=b""
-if not os.isatty(sys.stdin.fileno()): # type: ignore[attr-defined]
-	STDIN=sys.stdin.buffer.read()
+class JSObjEncoder(json.JSONEncoder):
+	def default(self, o):
+		#if isinstance(o, JSObj):
+		#	return self.default(o.obj)
+		if type(o).__name__=="Pattern": # Shush
+			return {
+				"pattern": o.pattern,
+				"flags": o.flags
+			}
+		if isinstance(o, bytes):
+			return str(o)[2:-1]
+		if hasattr(o, "__call__"):
+			return o()
+
+def makeOFMT(parsedArgs):
+	_header=not parsedArgs.no_headers
+	_mOffs1=parsedArgs.print_match_offset or parsedArgs.print_match_range
+	_mOffs2=parsedArgs.print_match_range
+	_mRange=("{range[0]:08x}"*_mOffs1)+("-{range[1]:08x}"*_mOffs2)
+	_mAt=_header and _mOffs1
+	_mRange=(" at "*_mAt) + (_mRange) + (": "*(_header or _mRange!=""))
+	return {
+		"dname"        : b"Directory: "                              *_header,
+		"fname"        : b"File: "                                   *_header,
+		"match"        : ("Match (R{regexIndex})"                    *_header)+_mRange,
+		"rundata"      : ("runData: "                                *_header)+"{runData}",
+		"countFiltered": ("{filter} {cat} {subCat} (R{regexIndex}): "*_header)+"{count}",
+		"countTotal"   : ("{cat} {subCat} (R{regexIndex}): "         *_header)+"{value}",
+	}

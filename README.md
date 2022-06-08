@@ -4,6 +4,10 @@ JREP is a general-purpose command line utility that takes the basic concept of G
 
 Basically I couldn't find a good GREP for windows and GREP itself kinda sucks so I did it myself. Excpect dumb bodges and messy code despite my efforts to keep both to a minimum.
 
+JREP is released under the "Don't Be a Dick" public license. Please see [dbad-license.org](https://dbad-license.org) or [LICENSE](LICENSE) for more details.
+
+All images used for testing have been provided by wikimedia under Crative Commons.
+
 To install via PIP: [`pip install JREP`](https://pypi.org/project/JREP/)
 
 Check [here](#compatibility) for compatibility info
@@ -13,8 +17,8 @@ For details, [check below](#extended-help-messages)
 
 <!--<HELP MSG>-->
 ```
-usage: jrep [--help [topic]] [--string] [--enhanced-engine]
-            [--file FILE [FILE ...]] [--glob GLOB [GLOB ...]] [--include-dirs]
+usage: jrep [--help [topic]] [--enhanced-engine] [--file FILE [FILE ...]]
+            [--glob GLOB [GLOB ...]] [--include-dirs]
             [--stdin-files | --stdin-globs | --stdin-anti-match-strings]
             [--no-duplicates] [--no-name-duplicates]
             [--name-regex Regex [Regex ...]]
@@ -40,7 +44,7 @@ usage: jrep [--help [topic]] [--string] [--enhanced-engine]
             [--match-regex Regex [Regex ...]]
             [--match-anti-regex Regex [Regex ...]]
             [--match-ignore-regex Regex [Regex ...]] [--sort SORT]
-            [--sort-regex Regex [Regex ...]] [--sort-dir SORT_DIR]
+            [--sort-dir SORT_DIR] [--sort-regex Regex [Regex ...]]
             [--no-headers] [--print-dir-names] [--print-file-names]
             [--print-full-paths] [--print-posix-paths] [--dont-print-matches]
             [--print-match-offset] [--print-match-range]
@@ -48,8 +52,8 @@ usage: jrep [--help [topic]] [--string] [--enhanced-engine]
             [--name-sub Regex [Regex ...]] [--dir-name-sub Regex [Regex ...]]
             [--escape] [--count COUNT [COUNT ...]] [--limit LIMIT [LIMIT ...]]
             [--depth-first] [--glob-root-dir GLOB_ROOT_DIR]
-            [--match-whole-lines] [--print-failed-files] [--no-warn]
-            [--hard-warn] [--weave-matches] [--strict-weave]
+            [--match-whole-lines] [--print-failed-files] [--json] [--no-warn]
+            [--hard-warn] [--weave-matches] [--strict-weave] [--no-exec]
             [--pre-match-exec cmd] [--match-exec cmd]
             [--if-match-exec-before cmd] [--if-match-exec-after cmd]
             [--if-no-match-exec-after cmd] [--pre-file-exec cmd]
@@ -58,21 +62,21 @@ usage: jrep [--help [topic]] [--string] [--enhanced-engine]
             [--pre-dir-exec cmd] [--dir-exec cmd] [--if-dir-exec-before cmd]
             [--if-dir-exec-after cmd] [--if-no-dir-exec-after cmd]
             [--order ORDER [ORDER ...]] [--no-flush] [--force-flush]
-            [--print-rundata] [--verbose]
+            [--verbose]
             [Regex ...]
 
 options:
   --help [topic], -h [topic]            show this help message and exit OR use
                                         `--help [topic]` for help with [topic]
 
+Global behaviour:
+  --enhanced-engine, -E                 Use alternate regex engine from
+                                        https://pypi.org/project/regex/
+
 Files and regexes:
   Regex                                 Regex(es) to process matches for
                                         (reffered to as "get regexes")
                                         
-  --string, -s                          Treat get regexes as strings. Doesn't
-                                        apply to any other options.
-  --enhanced-engine, -E                 Use alternate regex engine from
-                                        https://pypi.org/project/regex/
                                         
   --file FILE [FILE ...], -f FILE [FILE ...]
                                         A list of files to check
@@ -176,10 +180,10 @@ Sorting:
                                         reverse. A windows-esque "blockwise"
                                         sort is also available. Run jrep
                                         --help blockwise for more info
+  --sort-dir SORT_DIR                   --sort on a per-directory basis
   --sort-regex Regex [Regex ...]        Regexes to apply to file names keys
                                         (like --replace) for purposes of
                                         sorting (EXPERIMENTAL)
-  --sort-dir SORT_DIR                   --sort on a per-directory basis
 
 Output:
   --no-headers, -H                      Don't print match: or file: before
@@ -231,6 +235,7 @@ Misc.:
   --match-whole-lines, -L               Match whole lines like FINDSTR
   --print-failed-files                  Print file names even if they fail
                                         (Partially broken)
+  --json, -j                            Print output as JSON
   --no-warn                             Don't print warning messages
   --hard-warn                           Throw errors instead of warnings
   --weave-matches, -w                   Weave regex matchdes (print first
@@ -239,6 +244,9 @@ Misc.:
   --strict-weave, -W                    Only print full weave sets
 
 Exec:
+  --no-exec                             Don't run any exec functions. Useful
+                                        if using user input (STILL NOT SAFE)
+                                        
   --pre-match-exec cmd                  Command to run before printing each
                                         match
   --match-exec cmd                      Command to run after printing each
@@ -280,8 +288,6 @@ Debugging/Advanced:
                                         flushing the stdout buffer (ideal for
                                         chaining commands)
   --force-flush                         Always flush STDOUT (slow)
-  --print-rundata                       Print raw runData JSON at the end
-                                        (used for debugging)
   --verbose, -v                         Verbose info
 The following have extended help that can be seen with --help [topic]: sub, blockwise, order, exec
 ```

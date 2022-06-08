@@ -16,23 +16,25 @@ import re, fnmatch, json
 import mmap, itertools, functools, inspect
 _re=re
 try:
-	import regex
+	import regex as _regex
 except:
-	regex=None
-from . import modded_glob as glob, modded_argparse, processors, utils, common
+	_regex=None
+from . import modded_glob as glob, modded_argparse, processors, utils
 
 def verbose(x):
-	if parsedArgs.verbose:
-		caller=inspect.stack()[1]
-		print(f"Verbose on line {caller[2]} in function {caller[3]}: {x}")
+	# if parsedArgs.verbose:
+	# 	caller=inspect.stack()[1]
+	# 	print(f"Verbose on line {caller[2]} in function {caller[3]}: {x}")
+	pass
 def warn(x, error=None):
-	if not parsedArgs.no_warn:
-		if parsedArgs.hard_warn:
-			raise error or Exception(f"No error provided (Message: \"{x}\")")
-		else:
-			calls=inspect.stack()[1:]
-			print(f"Warning on lines {', '.join([f'{call[3]}:{call[2]}' for call in calls])} : {x}", file=sys.stderr)
-			#print(f"Waring on lines {', '.join([str(call[2]) for call in calls])} in functions {', '.join([str(call[3]) for call in calls])} : {x}", file=sys.stderr)
+	# if not parsedArgs.no_warn:
+	# 	if parsedArgs.hard_warn:
+	# 		raise error or Exception(f"No error provided (Message: \"{x}\")")
+	# 	else:
+	# 		calls=inspect.stack()[1:]
+	# 		print(f"Warning on lines {', '.join([f'{call[3]}:{call[2]}' for call in calls])} : {x}", file=sys.stderr)
+	# 		#print(f"Waring on lines {', '.join([str(call[2]) for call in calls])} in functions {', '.join([str(call[3]) for call in calls])} : {x}", file=sys.stderr)
+	raise error
 
 # Compatibility for old Python versions
 if not hasattr(functools, "cache"):
@@ -41,11 +43,12 @@ if not hasattr(functools, "cache"):
 parser=modded_argparse.CustomArgumentParser(formatter_class=modded_argparse.CustomHelpFormatter, add_help=False)
 parser.add_argument("--help", "-h", nargs="?", default=modded_argparse.SUPPRESS, action=modded_argparse.CustomHelpAction, metavar="topic", help="show this help message and exit OR use `--help [topic]` for help with [topic]")
 
-_group=parser.add_argument_group("Files and regexes")
-_group.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", help="Regex(es) to process matches for (reffered to as \"get regexes\")")
-parser.add_line()
-_group.add_argument("--string"                    , "-s", action="store_true"                   , help="Treat get regexes as strings. Doesn't apply to any other options.")
+_group=parser.add_argument_group("Global behaviour")
+#_group.add_argument("--string"                    , "-s", action="store_true"                   , help="Treat get regexes as strings. Doesn't apply to any other options.")
 _group.add_argument("--enhanced-engine"           , "-E", action="store_true"                   , help="Use alternate regex engine from https://pypi.org/project/regex/")
+_group=parser.add_argument_group("Files and regexes")
+_group.add_argument("regex"                       ,       nargs="*", default=[], metavar="Regex", action=modded_argparse.RegexAction, help="Regex(es) to process matches for (reffered to as \"get regexes\")")
+parser.add_line()
 parser.add_line()
 _group.add_argument("--file"                      , "-f", nargs="+", default=[]                 , help="A list of files to check")
 _group.add_argument("--glob"                      , "-g", nargs="+", default=[]                 , help="A list of globs to check")
@@ -121,7 +124,7 @@ _group.add_argument("--glob-root-dir"             ,                             
 parser.add_line()
 _group.add_argument("--match-whole-lines"         , "-L", action="store_true"                      , help="Match whole lines like FINDSTR")
 _group.add_argument("--print-failed-files"        ,       action="store_true"                      , help="Print file names even if they fail (Partially broken)")
-#_group.add_argument("--json"                      , "-j", action="store_true"                      , help="Print output as JSON")
+_group.add_argument("--json"                      , "-j", action="store_true"                      , help="Print output as JSON")
 _group.add_argument("--no-warn"                   ,       action="store_true"                      , help="Don't print warning messages")
 _group.add_argument("--hard-warn"                 ,       action="store_true"                      , help="Throw errors instead of warnings")
 _group.add_argument("--weave-matches"             , "-w", action="store_true"                      , help="Weave regex matchdes (print first results for each get regex, then second results, etc.)")
@@ -152,15 +155,11 @@ _group=parser.add_argument_group("Debugging/Advanced")
 _group.add_argument("--order"                     ,       nargs="+", default=list(processors.funcs)          , help="The order in which modifications to matches are applied. Run jrep --help order for more info")
 _group.add_argument("--no-flush"                  ,       action="store_true"                      , help="Improves speed by disabling manually flushing the stdout buffer (ideal for chaining commands)")
 _group.add_argument("--force-flush"               ,       action="store_true"                      , help="Always flush STDOUT (slow)")
-_group.add_argument("--print-rundata"             ,       action="store_true"                      , help="Print raw runData JSON at the end (used for debugging)")
+# _group.add_argument("--print-rundata"             ,       action="store_true"                      , help="Print raw runData JSON at the end (used for debugging)")
 _group.add_argument("--verbose"                   , "-v", action="store_true"                      , help="Verbose info")
-parsedArgs=parser.parse_args()
-
-verbose(parsedArgs)
-common.init(parsedArgs)
 
 # Helper functions
-def handleCount(rules, runData):
+def handleCount(parsedArgs, ofmt, rules, runData):
 	"""
 		Prints out --count data
 		Very janky but it works
@@ -172,7 +171,7 @@ def handleCount(rules, runData):
 	filters   ={"p":"passed", "h":"handled", "f":"failed"               }
 
 	def handleTotals(regexIndex, value):
-		print(common.ofmt["countTotal"].format(cat=keyCat.title(), subCat=keySubCatPlural, regexIndex=regexIndex, value=value))
+		print(ofmt["countTotal"].format(cat=keyCat.title(), subCat=keySubCatPlural, regexIndex=regexIndex, value=value))
 
 	def handleFiltereds(regexIndex, key):
 		if regexIndex=="*":
@@ -185,7 +184,7 @@ def handleCount(rules, runData):
 		if len(key)>3 and key[3]=="p":
 			filterCount/=divisor
 
-		print(common.ofmt["countFiltered"].format(filter=keySubCatFilter.title(), cat=keyCat, subCat=keySubCatFilter, regexIndex=regexIndex, count=filterCount))
+		print(ofmt["countFiltered"].format(filter=keySubCatFilter.title(), cat=keyCat, subCat=keySubCatFilter, regexIndex=regexIndex, count=filterCount))
 
 	for rule in rules:
 		for key in parsedArgs.count:
@@ -215,7 +214,7 @@ def handleCount(rules, runData):
 				for regexIndex, value in enumerate(runData[keyCat][keySubCatFilter+keySubCat+"PerRegex"]):
 					handleFiltereds(regexIndex, key)
 
-def fileContentsDontMatter():
+def fileContentsDontMatter(parsedArgs):
 	"""
 		If file contents don't matter, tell getFiles to not even run open() on them
 		JREP doesn't load file contents into memory (it uses mmap) but just opening a file handler takes time
@@ -225,7 +224,7 @@ def fileContentsDontMatter():
 	       not any(map(lambda x:re.search(r"[tdf]m", x), parsedArgs.limit.keys())) and\
 	       not any(map(lambda x:re.search(r"^[tdf]m(([pf]c)?[tr])?$", x), parsedArgs.count))
 
-def getFiles(parsedArgs, runData):
+def getFiles(parsedArgs, runData, stdin):
 	"""
 		Yields files selected with --file and --glob
 		Stdin has a filename of -
@@ -255,8 +254,8 @@ def getFiles(parsedArgs, runData):
 		# Files
 		verbose("Yielding STDIN files")
 		# --stdin-files
-		if utils.STDIN and parsedArgs.stdin_files:
-			yield from utils.STDIN.decode().splitlines()
+		if stdin is not None and parsedArgs.stdin_files:
+			yield from stdin.decode().splitlines()
 		# --file
 
 		verbose("Yielding files")
@@ -265,8 +264,8 @@ def getFiles(parsedArgs, runData):
 		# Globs
 		verbose("Yielding STDIN globs")
 		# --stdin-globs
-		if not utils.STDIN and parsedArgs.stdin_globs:
-			for pattern in utils.STDIN.decode().splitlines():
+		if stdin is not None and parsedArgs.stdin_globs:
+			for pattern in stdin.decode().splitlines():
 				yield from advancedGlob(pattern, recursive=True)
 		# --glob
 		verbose("Yielding globs")
@@ -274,9 +273,9 @@ def getFiles(parsedArgs, runData):
 			yield from advancedGlob(pattern, recursive=True)
 
 	# Add stdin as a file
-	if not os.isatty(sys.stdin.fileno()) and not parsedArgs.stdin_files and not parsedArgs.stdin_globs:
+	if stdin is not None and not parsedArgs.stdin_files and not parsedArgs.stdin_globs:
 		verbose("Processing STDIN")
-		yield {"name":"-", "basename":"-", "relDir":"", "absDir":"", "data":utils.STDIN, "isDir": False, "stdin": True}
+		yield {"name":"-", "basename":"-", "relDir":"", "absDir":"", "data":stdin, "isDir": False, "stdin": True}
 
 	for file in _getFiles():
 		verbose(f"Pre-processing \"{file}\"")
@@ -285,7 +284,7 @@ def getFiles(parsedArgs, runData):
 		absDir=os.path.normpath(os.path.join(os.getcwd(), relDir))
 		ret={"name": file, "basename":basename, "relDir":relDir, "absDir":absDir, "data": b"", "isDir": False, "stdin": False}
 		if os.path.isfile(file):
-			if fileContentsDontMatter() or not utils.filenameChecker(ret, parsedArgs):
+			if fileContentsDontMatter(parsedArgs) or not utils.filenameChecker(parsedArgs, ret):
 				# Does the file content matter? No? Ignore it then
 				verbose("Optimizing away actually opening the file")
 				yield ret
@@ -308,14 +307,14 @@ def getFiles(parsedArgs, runData):
 			yield ret
 
 noLimits=[]
-def checkLimitType(sn, filters="ptf"):
+def checkLimitType(parsedArgs, runData, sn, filters="ptf"):
 	cats={"d":"t", "f":"td", "m":"tdf"}[sn]
 	#if sn in noLimits:
 	#	return False
 
 	noLimitType=True
 	for category in cats:
-		ret=checkLimitCategory(category+sn, filters=filters)
+		ret=checkLimitCategory(parsedArgs, runData, category+sn, filters=filters)
 		if ret is False:
 			noLimitType=False
 		if ret is True:
@@ -327,13 +326,13 @@ def checkLimitType(sn, filters="ptf"):
 		noLimits.append(sn)
 	return False
 
-def checkLimitCategory(sn, filters="ptf"):
+def checkLimitCategory(parsedArgs, runData, sn, filters="ptf"):
 	if sn in noLimits or sn[1] in noLimits:
 		return None
 
 	noLimitCategory=True
 	for filter in filters:
-		ret=checkLimit(sn+filter)
+		ret=checkLimit(parsedArgs, runData, sn+filter)
 		if ret is None:
 			noLimits.append(sn+filter)
 		elif ret is False:
@@ -347,7 +346,7 @@ def checkLimitCategory(sn, filters="ptf"):
 		noLimits.append(sn)
 	return False
 
-def checkLimit(sn):
+def checkLimit(parsedArgs, runData, sn):
 	"""
 		Given an LCName's "short name" (total-files -> tf),
 		check whether or not it's exceeded its value in --limit (if set)
@@ -359,10 +358,10 @@ def checkLimit(sn):
 	limit=parsedArgs.limit[sn]
 	if limit==0:
 		return None
-	value=getLimitValue(sn)
+	value=getLimitValue(runData, sn)
 	return value>=limit
 
-def getLimitValue(sn):
+def getLimitValue(runData, sn):
 	nameMap={"t":"total","d":"dir","f":"file","m":"match"}
 	typeMap={"t":"total","p":"passed","f":"failed","h":"handled"}
 	plural="e"*(sn[1]=="m")+"s"
@@ -371,16 +370,36 @@ def getLimitValue(sn):
 	except KeyError:
 		return 0
 
-def main(parsedArgs=None):
+import json
+def main(parsedArgs=None, returnData=False, returnJSON=False, stdout=sys.stdout.buffer, stdin=True):
 	if parsedArgs is None          : parsedArgs=parser.parse_args()
 	if isinstance(parsedArgs, list): parsedArgs=parser.parse_args(parsedArgs)
 	if isinstance(parsedArgs, modded_argparse.argparse.Namespace): parsedArgs=dict(parsedArgs._get_kwargs())
 	if isinstance(parsedArgs, dict): parsedArgs=utils.JSObj(parsedArgs)
+	ofmt=utils.makeOFMT(parsedArgs)
+	ret={
+		# "arguments":{},
+		"files":[],
+		"matches":[]
+	}
+
+	if parsedArgs.json: returnJSON=True
+	if returnJSON     : returnData=True
+	if stdout is None : stdout=open(os.devnull, "wb")
+	if returnData:
+		_stdout=stdout
+		stdout=open(os.devnull, "wb")
+	STDIN=None
+	if not isinstance(stdin, bool):
+		STDIN=stdin
+	if stdin is True and not os.isatty(sys.stdin.fileno()):
+		STDIN=sys.stdin.buffer.read()
+
 	# Handle --enhanced-engine
 	if parsedArgs.enhanced_engine:
-		if regex is None:
+		if _regex is None:
 			raise ModuleNotFoundError("Third party module 'regex' isn't available")
-		re=regex
+		re=_regex
 	else:
 		re=_re
 
@@ -462,12 +481,8 @@ def main(parsedArgs=None):
 	if not parsedArgs.no_duplicates           : orderRemove(parsedArgs, "no-duplicates")
 
 	# The main file loop
-	for fileIndex, file in enumerate(utils.sortFiles(getFiles(parsedArgs, runData), parsedArgs.sort_regex, key=parsedArgs.sort), start=1):
+	for fileIndex, file in enumerate(utils.sortFiles(getFiles(parsedArgs, runData, STDIN), parsedArgs.sort_regex, key=parsedArgs.sort), start=1):
 		verbose(f"Processing \"{file['name']}\"")
-
-		if parsedArgs.print_rundata:
-			# Mainly for debugging. May expand upon later
-			print(common.ofmt["runData"].format(runData=json.dumps(runData)))
 
 		if file["isDir"] and not parsedArgs.include_dirs:
 			verbose(f"\"{file['name']}\" is a directory; Continuing")
@@ -493,9 +508,9 @@ def main(parsedArgs=None):
 				# Print data from last dir (--count)
 				if runData["lastDir"] is not None:
 					verbose("Just exited a directory")
-					handleCount(rules=["dir"], runData=runData)
+					handleCount(parsedArgs, ofmt, rules=["dir"], runData=runData)
 				# Handle --limit total-dir
-			if checkLimitCategory("td"):
+			if checkLimitCategory(parsedArgs, runData, "td"):
 				verbose("Total directory limit reached; Exiting...")
 				break
 			runData["total"]["totalDirs"]+=1
@@ -550,7 +565,7 @@ def main(parsedArgs=None):
 			if runData["currDir"]=="":
 				dirRegexResult=True
 			else:
-				dirRegexResult=utils.dirnameChecker(runData["currDir"], parsedArgs)
+				dirRegexResult=utils.dirnameChecker(parsedArgs, runData["currDir"])
 
 			if dirRegexResult is True:
 				runData["total"]["passedDirs"]+=1
@@ -576,15 +591,17 @@ def main(parsedArgs=None):
 				runData["dir"  ]["handledFiles"]+=1
 				runData["total"]["handledFiles"]+=1
 				for func in parsedArgs.order:
-					if func=="print-name":
-						processors.funcs["print-name"](parsedArgs, runData, file)
-					elif func=="print-dir-name":
-						processors.funcs["print-dir-name"](parsedArgs, runData, runData["currDir"])
-					elif func=="no-name-duplicates":
+					if func=="no-name-duplicates":
 						try:
 							processors.funcs["no-name-duplicates"](parsedArgs, file)
 						except utils.NextFile:
 							break
+					elif func=="print-dir-name":
+						processors.funcs["print-dir-name"](parsedArgs, runData, ofmt, runData["currDir"])
+					elif func=="print-name":
+						if returnData and not runData["file"]["printedName"]:
+							ret["files"].append({x:file[x] for x in file if x!="data"})
+						processors.funcs["print-name"](parsedArgs, runData, ofmt, file)
 
 			# Handle regex matching and all that jazz
 			for regexIndex, regex in enumerate(parsedArgs.regex):
@@ -601,14 +618,14 @@ def main(parsedArgs=None):
 
 				try:
 					# Turn regex into bytes
-					regex=regex.encode(errors="ignore")
+					#regex=regex.encode(errors="ignore")
 
 					# Probably a bad idea, performance wise
-					if parsedArgs.string:
-						regex=re.escape(regex)
+					#if parsedArgs.string:
+					#	regex=re.escape(regex)
 
 					# Process matches
-					for matchIndex, match in enumerate(re.finditer(regex, file["data"]), start=1):
+					for matchIndex, match in enumerate(regex.finditer(file["data"]), start=1):
 						# Files/Dirs per regex
 						if matchIndex==1:
 							runData["dir"  ]["handledFilesPerRegex"][regexIndex]+=1
@@ -638,6 +655,8 @@ def main(parsedArgs=None):
 						# Handle matches
 						for func in parsedArgs.order:
 							try:
+								if func=="print-name" and returnData and not runData["file"]["printedName"]:
+									ret["files"].append({x:file[x] for x in file if x!="data"})
 								match=processors.funcs[func](
 									regexIndex=regexIndex,
 									regex=regex,
@@ -646,7 +665,9 @@ def main(parsedArgs=None):
 									parsedArgs=parsedArgs,
 									match=match,
 									currDir=runData["currDir"],
-									re=re
+									re=re,
+									ofmt=ofmt,
+									stdout=stdout
 								) or match
 							except utils.NextMatch:
 								verbose("NextMatch")
@@ -664,9 +685,10 @@ def main(parsedArgs=None):
 							runData["total"]["passedMatchesPerRegex"][regexIndex]+=1
 							runData["dir"  ]["passedMatchesPerRegex"][regexIndex]+=1
 							runData["file" ]["passedMatchesPerRegex"][regexIndex]+=1
-
+							if returnData:
+								ret["matches"].append(match)
 						# Handle --match-limit, --dir-match-limit, and --total-match-limit
-						if "m" not in noLimits and checkLimitType("m"):
+						if "m" not in noLimits and checkLimitType(parsedArgs, runData, "m"):
 							break
 
 				except Exception as AAAAA:
@@ -682,35 +704,39 @@ def main(parsedArgs=None):
 				for regexIndex, match in enumerate(matches):
 					processors.printMatch(parsedArgs, runData, match, regexIndex)
 
-		handleCount(rules=["file"], runData=runData)
+		handleCount(parsedArgs, ofmt, rules=["file"], runData=runData)
 
 		# Hanlde --limit total-matches and total-files
-		if checkLimitCategory("tm"):
+		if checkLimitCategory(parsedArgs, runData, "tm"):
 			verbose("Total match limit reached; Exiting")
 			break
-		if checkLimitCategory("tf", filters="ptfh"):
+		if checkLimitCategory(parsedArgs, runData, "tf", filters="ptfh"):
 			verbose("Total file limit reached; Exiting")
 			break
 
 		# Handle --limit dir-files and dir-matches
-		if checkLimitCategory("df", filters="ptfh") or checkLimitCategory("dm"):
+		if checkLimitCategory(parsedArgs, runData, "df", filters="ptfh") or checkLimitCategory(parsedArgs, runData, "dm"):
 			verbose("Dir limit(s) reached")
 			runData["doneDir"]=True
 
 	# --count dir-*
 	if runData["currDir"] is not None and runData["total"]["totalDirs"]:
 		# Only runs if files were handled in two or more directories
-		handleCount(rules=["dir"], runData=runData)
+		handleCount(parsedArgs, ofmt, rules=["dir"], runData=runData)
 
 	# --count total-*
-	handleCount(rules=["total"], runData=runData)
+	handleCount(parsedArgs, ofmt, rules=["total"], runData=runData)
 
 	utils.execHandler(parsedArgs, parsedArgs.if_match_exec_after if runData["total"]["passedMatches"] else parsedArgs.if_no_match_exec_after)
 	utils.execHandler(parsedArgs, parsedArgs.if_file_exec_after  if runData["total"]["passedFiles"  ] else parsedArgs.if_no_file_exec_after )
 	utils.execHandler(parsedArgs, parsedArgs.if_dir_exec_after   if runData["total"]["passedDirs"   ] else parsedArgs.if_no_dir_exec_after  )
 
-	if parsedArgs.print_rundata:
-		print(common.ofmt["runData"].format(runData=json.dumps(runData)))
+	if parsedArgs.json:
+		_stdout.write(json.dumps(ret, cls=utils.JSObjEncoder).encode())
+	elif returnJSON:
+		return json.loads(json.dumps(ret, cls=utils.JSObjEncoder))
+	elif returnData:
+		return ret
 
 if __name__=="__main__":
 	main()

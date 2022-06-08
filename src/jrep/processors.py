@@ -4,7 +4,7 @@
 
 from typing import *
 import sys
-from . import utils, common
+from . import utils
 
 def funcReplace(parsedArgs, runData, match, regexIndex, **kwargs):
 	"""
@@ -68,7 +68,7 @@ def funcMatchRegex(parsedArgs, runData, match, regexIndex, **kwargs):
 	elif matchRegexResult is None:
 		raise utils.NextMatch()
 
-def funcPrintDirName(parsedArgs, runData, currDir, **kwargs):
+def funcPrintDirName(parsedArgs, runData, ofmt, currDir, stdout, **kwargs):
 	"""
 		Handle --print-directories
 	"""
@@ -85,18 +85,18 @@ def funcPrintDirName(parsedArgs, runData, currDir, **kwargs):
 		# --pre-dir-exec
 		utils.execHandler(parsedArgs, parsedArgs.pre_dir_exec, pDirName)
 
-	if parsedArgs.print_dir_names:
-		sys.stdout.buffer.write(common.ofmt["dname"]+pDirName)
-		sys.stdout.buffer.write(b"\n")
+	if parsedArgs.print_dir_names and not parsedArgs.json:
+		stdout.write(ofmt["dname"]+pDirName)
+		stdout.write(b"\n")
 		if runData["flushSTDOUT"]:
-			sys.stdout.buffer.flush()
+			stdout.flush()
 		runData["dir"]["printedName"]=True
 
 	if parsedArgs.dir_exec is not None:
 		# --dir-exec
 		utils.execHandler(parsedArgs, parsedArgs.dir_exec, pDirName)
 
-def funcPrintName(parsedArgs, runData, file, **kwargs):
+def funcPrintName(parsedArgs, runData, ofmt, file, stdout, **kwargs):
 	"""
 		Handle --print-names
 	"""
@@ -113,19 +113,19 @@ def funcPrintName(parsedArgs, runData, file, **kwargs):
 		# --pre-file-exec
 		utils.execHandler(parsedArgs.pre_file_exec, pFileName)
 
-	if parsedArgs.print_file_names:
-		sys.stdout.buffer.write(common.ofmt["fname"]+pFileName)
-		sys.stdout.buffer.write(b"\n")
+	if parsedArgs.print_file_names and not parsedArgs.json:
+		stdout.write(ofmt["fname"]+pFileName)
+		stdout.write(b"\n")
 		if runData["flushSTDOUT"]:
-			sys.stdout.buffer.flush()
+			stdout.flush()
 	runData["file"]["printedName"]=True
 
 	if parsedArgs.file_exec is not None:
 		# --file-exec
 
-		utils.execHandler(parsedArgs, .file_exec, pFileName)
+		utils.execHandler(parsedArgs, parsedArgs.file_exec, pFileName)
 
-def printMatch(parsedArgs, runData, match, regexIndex):
+def printMatch(parsedArgs, runData, ofmt, match, regexIndex, stdout):
 	"""
 		Print matches
 		Not much else to say
@@ -142,28 +142,28 @@ def printMatch(parsedArgs, runData, match, regexIndex):
 		# --pre-match-exec
 		utils.execHandler(parsedArgs, parsedArgs.pre_match_exec, match[0])
 
-	if not parsedArgs.dont_print_matches:
-		sys.stdout.buffer.write(common.ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
+	if not parsedArgs.dont_print_matches and not parsedArgs.json:
+		stdout.write(ofmt["match"].format(range=match.span(), regexIndex=regexIndex).encode())
 		out=match[0]
 		if parsedArgs.escape:
 			utils.escape(match[0])
-		sys.stdout.buffer.write(out)
-		sys.stdout.buffer.write(b"\n")
+		stdout.write(out)
+		stdout.write(b"\n")
 		if runData["flushSTDOUT"]:
-			sys.stdout.buffer.flush()
+			stdout.flush()
 
 	if parsedArgs.match_exec is not None:
 		# --match-exec
 		utils.execHandler(parsedArgs, parsedArgs.match_exec, match[0])
 
-def funcPrintMatch(parsedArgs, runData, file, regexIndex, match, **kwargs):
+def funcPrintMatch(parsedArgs, runData, ofmt, file, regexIndex, match, stdout, **kwargs):
 	"""
 		Print matches
 	"""
 	if parsedArgs.weave_matches:
 		runData["file"]["matches"][regexIndex].append(match)
 	else:
-		printMatch(parsedArgs, runData, match, regexIndex)
+		printMatch(parsedArgs, runData, ofmt, match, regexIndex, stdout)
 
 def funcNoDuplicates(parsedArgs, runData, match, **kwargs):
 	"""

@@ -64,6 +64,16 @@ def getRegexModule(namespace):
 		return regex
 	return re
 
+def compileRegexes(namespace, regexes):
+	return [getRegexModule(namespace).compile(pattern.encode()) for pattern in regexes]
+
+class RegexAction(argparse.Action):
+	"""
+		Pre-processor for --count targets
+	"""
+	def __call__(self, parser, namespace, values, option_string):
+		setattr(namespace, self.dest, compileRegexes(namespace, values))
+
 def parseLCName(name):
 	name=name.replace("-", "_")
 	if len(name)==2:
@@ -108,8 +118,10 @@ class MatchRegexAction(argparse.Action):
 		An argument of just * means that the following arguments should be applied to the next parsedArgs.regex
 	"""
 	def __call__(self, parser, namespace, values, option_string):
-		re=getRegexModule(namespace)
-		setattr(namespace, self.dest, listSplit(map(lambda x:re.comile(x.encode()), values), "*"))
+		ret=[]
+		for regexGroup in listSplit(values, "*"):
+			ret.append(compileRegexes(namespace, regexGroup))
+		setattr(namespace, self.dest, ret)
 
 class SubRegexAction(argparse.Action):
 	"""
@@ -121,7 +133,6 @@ class SubRegexAction(argparse.Action):
 		If a match from get regex 1 does't match /t/, replace e with d
 	"""
 	def __call__(self, parser, namespace, values, option_string):
-		re=getRegexModule(namespace)
 		ret=[]
 		for regexGroup in listSplit(values, "*"):
 			ret.append([])
@@ -130,10 +141,10 @@ class SubRegexAction(argparse.Action):
 				thingParts=listSplit(subSets, "?")
 				if   len(thingParts)==1: thingParts=[[],            [], thingParts[0]]
 				elif len(thingParts)==2: thingParts=[thingParts[0], [], thingParts[1]]
-				parsed["tests"    ]=[           x.encode()  for x in thingParts[0]      ]
-				parsed["antiTests"]=[           x.encode()  for x in thingParts[1]      ]
-				parsed["patterns" ]=[re.compile(x.encode()) for x in thingParts[2][0::2]] # Even elems
-				parsed["repls"    ]=[           x.encode()  for x in thingParts[2][1::2]] # Odd  elems
+				parsed["tests"    ]=compileRegexes(namespace, thingParts[0]      )
+				parsed["antiTests"]=compileRegexes(namespace, thingParts[1]      )
+				parsed["patterns" ]=compileRegexes(namespace, thingParts[2][0::2]) # Even elems
+				parsed["repls"    ]=[x.encode() for x in thingParts[2][1::2]] # Odd  elems
 				ret[-1].append(parsed)
 		setattr(namespace, self.dest, ret)
 
@@ -142,16 +153,14 @@ class FileRegexAction(argparse.Action):
 		Pre-processor for --file-regex stuff
 	"""
 	def __call__(self, parser, namespace, values, option_string):
-		re=getRegexModule(namespace)
-		setattr(namespace, self.dest, [re.comile(x.encode()) for x in values])
+		setattr(namespace, self.dest, compileRegexes())
 
 class SortRegexAction(argparse.Action):
 	"""
 		Pre-processor for --sort-regex
 	"""
 	def __call__(self, parser, namespace, values, option_string):
-		re=getRegexModule(namespace)
-		setattr(namespace, self.dest, [re.comile(x) if i%2==1 else x for i,x in enumerate(values)])
+		setattr(namespace, self.dest, [getRegexModule(namespace).compile(x.encode()) if i%2==1 else x.encode() for i,x in enumerate(values)])
 
 class CustomArgumentParser(argparse.ArgumentParser):
 	"""

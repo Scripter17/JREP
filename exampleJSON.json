@@ -1,0 +1,39 @@
+{
+	"parsedArgs":{"regex":["a(.)\\1a"], "glob":["*"], ...},
+	"files":[
+		{
+			"name": "xyz/a.txt",
+			"basename": "a.txt",
+			"relDir": "xyz",
+			"absDir": "C:/xyz",
+			"isDir": false,
+			"stdin": false
+		}
+	],
+	"matches":[
+		{
+			"newFile":true,
+			"newDir":true,
+			"file":"files"[0],
+			"fileId":0,
+			"match":{
+				"match":"abba",
+				"span":[0,4],
+				"regex":"a(.)\\1a",
+				"groups":["abba", "b"]
+			}
+		},
+		{
+			"newFile":false,
+			"newDir":false,
+			"file":"files"[0],
+			"fileId":0,
+			"match":{
+				"match":"agga",
+				"span":[0,4],
+				"regex":"a(.)\\1a",
+				"groups":["aga", "g"]
+			}
+		}
+	]
+}

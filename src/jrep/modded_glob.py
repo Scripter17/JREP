@@ -12,10 +12,6 @@ import stat
 import sys
 
 from . import utils
-sort_regex=None
-depth_first=None
-sort_dir=None
-runData=None
 
 __all__ = ["glob", "iglob", "escape"]
 

@@ -1,18 +1,42 @@
-import subprocess as sp
+import subprocess as sp, jrep
 
 tests=[
 	{
-		"command":["jrep", "a.", "-g", "testing/*", "-dP"],
-		"equals":b"""Directory: testing
-Match (R0): ab
-Match (R0): a\r\n""",
-		"exit":0
+		"args":[r"(?i)[+-]?[\d,]+(\.\d+)?(e[+-]?[\d,]+)?", "-f", "testing/text/numbers.txt"],
+		"pattern":{
+			"files":[
+				{"name":"testing/text/numbers.txt"}
+			],
+			"matches":[
+				{"groups":[None, None], "span":[0,17]},
+				...,
+				{"span":[39,48]}
+			]
+		}
 	}
 ]
 
+def matchReplacement(struct, pattern):
+	if isinstance(struct, dict) and isinstance(pattern, dict):
+		for x in pattern:
+			if x not in struct:
+				return False
+			if matchReplacement(struct[x], pattern[x]) is False:
+				return False
+	elif isinstance(struct, list) and isinstance(pattern, list):
+		for x,y in zip(struct, pattern):
+			if pattern is not ...:
+				if matchReplacement(x, y) is False:
+					return False
+	return pattern is ... or struct==pattern
+
+
+def test_matching():
+	assert matchReplacement({"a":[1,2,3], "b":[2]}, {"a":[...,2], "b":[...]})
+	assert matchReplacement(2, 3) is False
+	assert matchReplacement(2, 2)
+
 def test_JREP():
 	for test in tests:
-		result=sp.run(test["command"], shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
-		if "start"  in test: assert result.stdout.startswith(test["start" ])
-		if "equals" in test: assert result.stdout     ==     test["equals"]
-		if "end"    in test: assert result.stdout.endswith  (test["end"   ])
+		result=jrep.main(test["args"], returnJSON=True)
+		assert matchReplacement(result, test["pattern"])
