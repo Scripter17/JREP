@@ -1,11 +1,6 @@
-import sys, os
+import sys, os, jrep.jrep
 
-import jrep
-print(dir(jrep))
-import jrep.jrep
-print(dir(jrep.jrep))
-from jrep.jrep import jrep as aaa
-print(dir(aaa))
+print(jrep.jrep.main())
 
 tests=[
 	{
