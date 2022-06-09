@@ -1,4 +1,11 @@
-import sys, os, jrep.jrep as jrep
+import sys, os
+
+import jrep
+print(dir(jrep))
+import jrep.jrep
+print(dir(jrep.jrep))
+from jrep.jrep import jrep as aaa
+print(dir(aaa))
 
 tests=[
 	{
