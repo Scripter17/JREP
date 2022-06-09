@@ -1,8 +1,4 @@
-import sys, os
-
-sys.path.insert(0, os.path.normpath(__file__+"/../src/jrep"))
-
-from jrep import jrep
+import sys, os, jrep.jrep as jrep
 
 tests=[
 	{
@@ -44,5 +40,5 @@ def test_matching():
 
 def test_JREP():
 	for test in tests:
-		result=jrep.main(test["args"], returnJSON=True)
+		result=jrep.main(test["args"])
 		assert matchReplacement(result, test["pattern"])
