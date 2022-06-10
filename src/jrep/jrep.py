@@ -290,6 +290,7 @@ def getFiles(parsedArgs, runData, stdin):
 				yield ret
 			else:
 				try:
+					print(open(file, mode="rb", buffering=65536).read())
 					with open(file, mode="rb", buffering=65536) as f:
 						# Stream data from file instead of loading a 48.2TB file into RAM
 						try:
