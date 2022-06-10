@@ -10,6 +10,8 @@ All images used for testing have been provided by wikimedia under Crative Common
 
 To install via PIP: [`pip install JREP`](https://pypi.org/project/JREP/)
 
+To install from GitHub: `git clone https://github.com/Scripter17/JREP & pip install ./JREP`
+
 Check [here](#compatibility) for compatibility info
 
 The current output of `jrep --help`:  
@@ -52,8 +54,8 @@ usage: jrep [--help [topic]] [--enhanced-engine] [--file FILE [FILE ...]]
             [--name-sub Regex [Regex ...]] [--dir-name-sub Regex [Regex ...]]
             [--escape] [--count COUNT [COUNT ...]] [--limit LIMIT [LIMIT ...]]
             [--depth-first] [--glob-root-dir GLOB_ROOT_DIR]
-            [--match-whole-lines] [--print-failed-files] [--json] [--no-warn]
-            [--hard-warn] [--weave-matches] [--strict-weave] [--no-exec]
+            [--print-failed-files] [--json] [--no-warn] [--hard-warn]
+            [--weave-matches] [--strict-weave] [--no-exec]
             [--pre-match-exec cmd] [--match-exec cmd]
             [--if-match-exec-before cmd] [--if-match-exec-after cmd]
             [--if-no-match-exec-after cmd] [--pre-file-exec cmd]
@@ -232,7 +234,6 @@ Misc.:
                                         files
   --glob-root-dir GLOB_ROOT_DIR         Root dir to run globs in (JANK)
                                         
-  --match-whole-lines, -L               Match whole lines like FINDSTR
   --print-failed-files                  Print file names even if they fail
                                         (Partially broken)
   --json, -j                            Print output as JSON
@@ -331,28 +332,30 @@ The end result is that file2.jpg is correctly placed before file10.jpg
 
 ## (`exec`) Using the `--exec` family of options
 Usage looks like `--exec "echo {}"` or just `--exec "echo"`  
+To use the filename/dir multiple times use `{0}` (this is for future proofing)  
 `--match-exec`/`--exec`: after  printing matches  
 `--pre-match-exec`: before printing matches  
+  
 `--match-exec`: after  printing file names  
 `--pre-match-exec`: before printing file names  
+`--if-file-exec-before`: Run once before the first file is processed  
+`--if-file-exec-after`: Run once after the last file is processed  
+`--if-no-file-exec-after`: Run at the end if no file is ever processed  
+  
 `--dir-exec`: after  printing directory names  
-`--pre-dir-exec`: before printing directory names
+`--pre-dir-exec`: before printing directory names  
+`--if-dir-exec-before`: Run once before the first dir is processed  
+`--if-dir-exec-after`: Run once after the last dir is processed  
+`--if-no-dir-exec-after`: Run at the end if no dir is ever processed
 <!--</EXTHELP MSGS>-->
 
 # Compatibility
 
-&nbsp;|Python 3.6|3.7|3.8|3.9|3.10
-|:-:|:-:|:-:|:-:|:-:|:-:|
-Windows 10  |? |? |? |? |Y 
-Ubuntu 20.04|? |? |? |? |? 
-
-- I primarily develop JREP on a Windows 10 machine running Python 3.10
-- Due to how I override some internal stuff I'll need to test each version of python individually
-- I don't have a Mac machine or the $1000 required to get one. It *probably* works but don't count on it
+Currently due to [technical limitations](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#choosing-github-hosted-runners) I can only do automatic testing for Ubuntu 20.04, Windows Server 2022, and macOS Big Sur 11
 
 The end goal is for JREP to 100% work on
 - Windows 7 through 11
-- The second latest LTS releases of every major Linux distro
+- The past decade of every major Linux distro
 - The past decade of Mac machines
 
 I don't think there's much (if any) platform-specific jank in JREP but it'll take a while to confirm that

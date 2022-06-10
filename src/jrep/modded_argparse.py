@@ -41,12 +41,21 @@ _extendedHelp={
 	# exec
 	"exec":"""Using the `--exec` family of options:
 	Usage looks like `--exec "echo {}"` or just `--exec "echo"`
-	`--match-exec`/`--exec`: after  printing matches
-	`--pre-match-exec`     : before printing matches
-	`--match-exec`         : after  printing file names
-	`--pre-match-exec`     : before printing file names
-	`--dir-exec`           : after  printing directory names
-	`--pre-dir-exec`       : before printing directory names""",
+	To use the filename/dir multiple times use `{0}` (this is for future proofing)
+	`--match-exec`/`--exec`  : after  printing matches
+	`--pre-match-exec`       : before printing matches
+
+	`--match-exec`           : after  printing file names
+	`--pre-match-exec`       : before printing file names
+	`--if-file-exec-before`  : Run once before the first file is processed
+	`--if-file-exec-after`   : Run once after the last file is processed
+	`--if-no-file-exec-after`: Run at the end if no file is ever processed
+
+	`--dir-exec`             : after  printing directory names
+	`--pre-dir-exec`         : before printing directory names
+	`--if-dir-exec-before`   : Run once before the first dir is processed
+	`--if-dir-exec-after`    : Run once after the last dir is processed
+	`--if-no-dir-exec-after` : Run at the end if no dir is ever processed""",
 }
 for topic in _extendedHelp:
 	# Edits _extendedHelp to make generating the README easier
