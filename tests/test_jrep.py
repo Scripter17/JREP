@@ -13,6 +13,34 @@ tests=[
 				{"span":[39,48]}
 			]
 		}
+	},
+	{
+		"args":[],
+		"pattern":{"files": ..., "matches": ...}
+	},
+	{
+		"args":[r"(.)(..)", "-f", "testing/text/letters.txt", "-r", r"\1\2", "--sub", r"[aeiou]", "h", "-E"],
+		"pattern":{
+			"matches":[
+				{"0":"hbc"},
+				{"0":"dhf"},
+				{"0":"bcd"},
+			]
+		}
+	},
+	{
+		"args":[r"(.)(..)", "-f", "testing/text/letters.txt", "-r", r"\1\2", "-E", "--sub", "f", "?", "d", "?", r"[aeiou]", "h"],
+		"pattern":{
+			"matches":[
+				{"0":"abc"},
+				{"0":"def"},
+				{"0":"bcd"},
+				{"0":"hf\r"},
+				{"0":"cde"},
+				{"0":"def"},
+				{"0":"hf\r"}
+			]
+		}
 	}
 ]
 
@@ -41,5 +69,9 @@ def test_matching():
 def test_JREP():
 	for test in tests:
 		result=jrep.jrep.main(test["args"], returnJSON=True)
-		print(result)
-		assert matchReplacement(result, test["pattern"])
+		try:
+			assert matchReplacement(result, test["pattern"])
+		except Exception as e:
+			print(test)
+			print(result)
+			raise e

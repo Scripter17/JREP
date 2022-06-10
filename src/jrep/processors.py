@@ -11,14 +11,17 @@ def funcReplace(parsedArgs, runData, match, regexIndex, **kwargs):
 		Handle --replace
 	"""
 	replacement=parsedArgs.replace[regexIndex%len(parsedArgs.replace)]
-	return utils.delayedSub(replacement.encode(errors="ignore"), match)
+	return utils.delayedSub(replacement.encode(errors="ignore"), match, parsedArgs.enhanced_engine)
 
 def funcSub(parsedArgs, runData, match, regexIndex, **kwargs):
 	"""
 		Handle --sub
 	"""
-	match[0]=utils._funcSub(parsedArgs.sub, match[0], regexIndex, **kwargs)
-	return match
+	ret=utils.JSObj({
+		**match,
+		"0":utils._funcSub(parsedArgs.sub, match[0], regexIndex, **kwargs)
+	})
+	return ret
 
 def funcMatchWholeLines(parsedArgs, runData, match, file, **kwargs):
 	"""

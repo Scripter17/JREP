@@ -1,0 +1,6 @@
+abcdef
+bcdef
+cdef
+def
+ef
+f

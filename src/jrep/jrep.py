@@ -306,10 +306,9 @@ def getFiles(parsedArgs, runData, stdin):
 			ret["isDir"]=True
 			yield ret
 
-noLimits=[]
 def checkLimitType(parsedArgs, runData, sn, filters="ptf"):
 	cats={"d":"t", "f":"td", "m":"tdf"}[sn]
-	#if sn in noLimits:
+	#if sn in runData["noLimits"]:
 	#	return False
 
 	noLimitType=True
@@ -322,19 +321,19 @@ def checkLimitType(parsedArgs, runData, sn, filters="ptf"):
 
 	if noLimitType:
 		for cat in cats:
-			noLimits.remove(cat+sn)
-		noLimits.append(sn)
+			runData["noLimits"].remove(cat+sn)
+		runData["noLimits"].append(sn)
 	return False
 
 def checkLimitCategory(parsedArgs, runData, sn, filters="ptf"):
-	if sn in noLimits or sn[1] in noLimits:
+	if sn in runData["noLimits"] or sn[1] in runData["noLimits"]:
 		return None
 
 	noLimitCategory=True
 	for filter in filters:
 		ret=checkLimit(parsedArgs, runData, sn+filter)
 		if ret is None:
-			noLimits.append(sn+filter)
+			runData["noLimits"].append(sn+filter)
 		elif ret is False:
 			noLimitCategory=False
 		elif ret is True:
@@ -342,8 +341,8 @@ def checkLimitCategory(parsedArgs, runData, sn, filters="ptf"):
 
 	if noLimitCategory:
 		for _ in filters:
-			noLimits.pop()
-		noLimits.append(sn)
+			runData["noLimits"].pop()
+		runData["noLimits"].append(sn)
 	return False
 
 def checkLimit(parsedArgs, runData, sn):
@@ -352,7 +351,7 @@ def checkLimit(parsedArgs, runData, sn):
 		check whether or not it's exceeded its value in --limit (if set)
 		Like handleCount, this function is quite jank, but it works
 	"""
-	if sn in noLimits:
+	if sn in runData["noLimits"]:
 		return False
 
 	limit=parsedArgs.limit[sn]
@@ -371,10 +370,23 @@ def getLimitValue(runData, sn):
 		return 0
 
 def main(parsedArgs=None, returnData=False, returnJSON=False, stdout=sys.stdout.buffer, stdin=True):
-	if parsedArgs is None          : parsedArgs=parser.parse_args()
-	if isinstance(parsedArgs, list): parsedArgs=parser.parse_args(parsedArgs)
+	if parsedArgs is None          : parsedArgs=sys.argv[1:]
+	if isinstance(parsedArgs, list):
+		# Unfortunately --enhanced-engine only affects arguments *after* it
+		# This patches that until I can properly fix it
+		parsedArgs=[*parsedArgs]
+		if "-E" in parsedArgs:
+			parsedArgs=[*parsedArgs]
+			parsedArgs.remove("-E")
+			parsedArgs.insert(0, "-E")
+		if "--enhanced-engine" in parsedArgs:
+			parsedArgs=[*parsedArgs]
+			parsedArgs.remove("--enhanced-engine")
+			parsedArgs.insert(0, "--enhanced-engine")
+		parsedArgs=parser.parse_args(parsedArgs)
 	if isinstance(parsedArgs, modded_argparse.argparse.Namespace): parsedArgs=dict(parsedArgs._get_kwargs())
 	if isinstance(parsedArgs, dict): parsedArgs=utils.JSObj(parsedArgs)
+	parsedArgs.order=[*parsedArgs.order]
 	ofmt=utils.makeOFMT(parsedArgs)
 	ret={
 		# "arguments":{},
@@ -455,6 +467,7 @@ def main(parsedArgs=None, returnData=False, returnJSON=False, stdout=sys.stdout.
 			"passedMatchesPerRegex":[0 for _ in parsedArgs.regex],
 			"failedMatchesPerRegex":[0 for _ in parsedArgs.regex],
 		},
+		"noLimits":[],
 		"matchedStrings":set(),  # --no-duplicates handler
 		"filenames":[],
 		"currDir":None,
@@ -477,7 +490,6 @@ def main(parsedArgs=None, returnData=False, returnJSON=False, stdout=sys.stdout.
 	if not parsedArgs.match_regex and not parsedArgs.match_anti_regex and not parsedArgs.match_ignore_regex: orderRemove(parsedArgs, "match-regex")
 	if not parsedArgs.no_name_duplicates      : orderRemove(parsedArgs, "no-name-duplicates")
 	if not parsedArgs.no_duplicates           : orderRemove(parsedArgs, "no-duplicates")
-
 	# The main file loop
 	for fileIndex, file in enumerate(utils.sortFiles(getFiles(parsedArgs, runData, STDIN), parsedArgs.sort_regex, key=parsedArgs.sort), start=1):
 		verbose(f"Processing \"{file['name']}\"")
@@ -686,7 +698,7 @@ def main(parsedArgs=None, returnData=False, returnJSON=False, stdout=sys.stdout.
 							if returnData:
 								ret["matches"].append(match)
 						# Handle --match-limit, --dir-match-limit, and --total-match-limit
-						if "m" not in noLimits and checkLimitType(parsedArgs, runData, "m"):
+						if "m" not in runData["noLimits"] and checkLimitType(parsedArgs, runData, "m"):
 							break
 
 				except Exception as AAAAA:

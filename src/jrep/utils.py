@@ -20,6 +20,7 @@ class JSObj(dict):
 		This class mimicks that to make mutilating re.Match objects easier
 	"""
 	def __init__(self, obj, default=None, defaultFactory=None):
+		object.__setattr__(self, "obj"            , obj)
 		object.__setattr__(self, "default"        , default)
 		object.__setattr__(self, "_defaultFactory", defaultFactory)
 		super().__init__(obj)
@@ -62,8 +63,8 @@ def parseTemplate(repl, match, enhancedEngine):
 	# ([(1, 1)], ['a', None, 'b'])
 	if enhancedEngine:
 		# I already have the code for handling sre_parse.parse_template
-		parsedTemplate=_compile_replacement_helper(match.re, repl) # type: ignore
-		ret=([], parsedTemplate)
+		parsedTemplate=_compile_replacement_helper(match.re, repl)
+		ret=([], [*parsedTemplate])
 		for i, x in enumerate(parsedTemplate):
 			if isinstance(x, int):
 				ret[0].append((i, x))
@@ -77,14 +78,14 @@ def parseTemplate(repl, match, enhancedEngine):
 		# return ret
 		return sre_parse.parse_template(repl, match.re)
 
-def delayedSub(repl, match):
+def delayedSub(repl, match, enhancedEngine):
 	"""
 		Use the secret sre_parse module to emulate re.sub with a re.Match object
 		Used exclusively for --replace
 		Python 3.11: sre_parse is removed, so I stole the function and put it at the top of this file
 		I really need to give up on the "JREP as a single file" dream
 	"""
-	parsedTemplate=parseTemplate(repl, match.re)
+	parsedTemplate=parseTemplate(repl, match, enhancedEngine)
 	groups=[match[0], *match.groups()]
 	for x in parsedTemplate[0]:
 		parsedTemplate[1][x[0]]=groups[x[1]]
@@ -272,7 +273,7 @@ class JSObjEncoder(json.JSONEncoder):
 				"flags": o.flags
 			}
 		if isinstance(o, bytes):
-			return str(o)[2:-1]
+			return o.decode() # TODO: FIX INVALID UTF-8
 		if hasattr(o, "__call__"):
 			return o()
 
