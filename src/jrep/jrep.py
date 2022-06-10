@@ -290,7 +290,7 @@ def getFiles(parsedArgs, runData, stdin):
 				yield ret
 			else:
 				try:
-					with open(file, mode="r", buffering=65536) as f:
+					with open(file, mode="rb", buffering=65536) as f:
 						# Stream data from file instead of loading a 48.2TB file into RAM
 						try:
 							mmapFile=mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
