@@ -39,7 +39,7 @@ def test_matching():
 	assert matchReplacement(2, 2)
 
 def test_JREP():
-	print(os.cwd)
+	print(os.getcwd())
 	print(glob.glob("**"))
 	for test in tests:
 		result=jrep.jrep.main(test["args"], returnJSON=True)
