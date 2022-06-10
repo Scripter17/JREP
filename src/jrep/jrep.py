@@ -607,11 +607,11 @@ def main(parsedArgs=None, returnData=False, returnJSON=False, stdout=sys.stdout.
 						except utils.NextFile:
 							break
 					elif func=="print-dir-name":
-						processors.funcs["print-dir-name"](parsedArgs, runData, ofmt, runData["currDir"])
+						processors.funcs["print-dir-name"](parsedArgs, runData, ofmt, runData["currDir"], stdout)
 					elif func=="print-name":
 						if returnData and not runData["file"]["printedName"]:
 							ret["files"].append({x:file[x] for x in file if x!="data"})
-						processors.funcs["print-name"](parsedArgs, runData, ofmt, file)
+						processors.funcs["print-name"](parsedArgs, runData, ofmt, file, stdout)
 
 			# Handle regex matching and all that jazz
 			for regexIndex, regex in enumerate(parsedArgs.regex):
