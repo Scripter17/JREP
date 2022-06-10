@@ -1,7 +1,5 @@
 import sys, os, jrep.jrep
 
-print(jrep.jrep.main())
-
 tests=[
 	{
 		"args":[r"(?i)[+-]?[\d,]+(\.\d+)?(e[+-]?[\d,]+)?", "-f", "testing/text/numbers.txt"],
@@ -42,5 +40,5 @@ def test_matching():
 
 def test_JREP():
 	for test in tests:
-		result=jrep.main(test["args"])
+		result=jrep.jrep.main(test["args"], returnJSON=True)
 		assert matchReplacement(result, test["pattern"])
