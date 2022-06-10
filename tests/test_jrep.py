@@ -1,4 +1,4 @@
-import sys, os, jrep.jrep
+import sys, os, jrep.jrep, glob
 
 tests=[
 	{
@@ -39,6 +39,8 @@ def test_matching():
 	assert matchReplacement(2, 2)
 
 def test_JREP():
+	print(os.cwd)
+	print(glob.glob("**"))
 	for test in tests:
 		result=jrep.jrep.main(test["args"], returnJSON=True)
 		assert matchReplacement(result, test["pattern"])
